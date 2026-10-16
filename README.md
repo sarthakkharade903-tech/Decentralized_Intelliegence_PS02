@@ -1,8 +1,9 @@
-# NeuroVault: Brain MRI Tumor Segmentation & 3D Interactive Platform
+# NeuroVault: Brain MRI Anatomical Research & Tumor Segmentation Platform
 
 [![Hackathon](https://img.shields.io/badge/Hackathon-Kurukshetra%2024h-blueviolet)](#)
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
-[![Three.js](https://img.shields.io/badge/3D%20Graphics-Three.js%20r183-black.svg)](https://threejs.org/)
+[![MONAI](https://img.shields.io/badge/MONAI-Core%20Medical-darkgreen.svg)](https://monai.io/)
+[![Design System](https://img.shields.io/badge/Design-Warm%20Blush%20%26%20Oxblood-8B2646.svg)](#)
 [![Frontend](https://img.shields.io/badge/Frontend-React%2019%20%2B%20Vite%208%20%2B%20Tailwind%20v4-61dafb.svg)](https://vite.dev/)
 [![License](https://img.shields.io/badge/License-MIT%20%2F%20Research%20Only-lightgrey)](#)
 
@@ -11,17 +12,21 @@
 
 ---
 
-## 1. Problem Statement & Hackathon Context
+## 1. Problem Statement & Design Vision
 
-Developed for the **Kurukshetra Technical Inauguration & 24-Hour Hackathon**, **NeuroVault** addresses the clinical challenge of segmenting and quantifying brain gliomas from multi-parametric magnetic resonance imaging (mpMRI).
+Developed for the **Kurukshetra Technical Inauguration & 24-Hour Hackathon**, **NeuroVault** combines high-level medical-imaging machine learning with an editorial anatomy atlas visual identity.
 
-Clinicians inspect four distinct MRI modalities to delineate distinct tumor compartments:
-- **T1-weighted (T1)**: General anatomical reference.
-- **T1-weighted Contrast-Enhanced / Gadolinium (T1Gd)**: Highlights blood-brain barrier breakdown and active, vascularized enhancing tumor margins.
-- **T2-weighted (T2)**: Delineates fluid and bulk lesion boundaries.
-- **Fluid Attenuated Inversion Recovery (FLAIR)**: Suppresses pure cerebrospinal fluid (CSF) signals to highlight peritumoral vasogenic edema.
-
-NeuroVault provides a cinematic, real-time 3D anatomical visualization of the brain, coupled with local NIfTI ingestion across all 4 sequences, preparing scans for automated 3D deep-learning segmentation via MONAI.
+The interface is structured into two distinct, deliberate environments:
+1. **World A: Warm Blush Anatomy Hero (`#E9DDD5`)**:
+   - Editorial serif typography (*"Look deeper. See beyond."*).
+   - Authentic annotated 2D human brain atlas illustration in lateral profile, featuring fine-line callouts for the **Frontal Lobe**, **Parietal Lobe**, **Temporal Lobe**, **Occipital Lobe**, and **Cerebellum**.
+   - Classical anatomical views rail displaying superior, lateral, and ventral orientations with auto-cycling.
+   - Primary call-to-action that smoothly transitions to the workspace.
+2. **World B: Oxblood MRI Workspace (`#6D263D`)**:
+   - Deep wine-tinted radiological workspace for sequence ingestion.
+   - 4 dedicated upload cards for **T1**, **T1Gd**, **T2**, and **FLAIR** featuring real axial brain MRI slice thumbnails.
+   - 100% browser-local NIfTI (`.nii`, `.nii.gz`) validation, drag-and-drop, and replacement.
+   - Clear workflow step tracker (`Upload Scans` $\rightarrow$ `Process` $\rightarrow$ `View Results` $\rightarrow$ `Explore & Analyze`).
 
 ---
 
@@ -29,32 +34,23 @@ NeuroVault provides a cinematic, real-time 3D anatomical visualization of the br
 
 | Component | Status | Details |
 | :--- | :--- | :--- |
-| **Header** | **Implemented & Verified** | Minimal design with brain outline icon, `NeuroVault` wordmark, and singular active `Home` link with cyan glow. |
-| **Hero Copy & Typography** | **Implemented & Verified** | Bold *"Look deeper. See beyond."* headline, concise supporting copy, and 4 modality chips (`T1 Native`, `T1Gd Contrast`, `T2-Weighted`, `FLAIR Edema`). |
-| **Real-Time 3D Brain** | **Implemented & Verified** | Interactive Three.js anatomical human brain model (`brain.glb`) with cyan/teal rim lighting, warm amber accents, neural filaments, glowing synapse nodes, particle dust, and smooth pointer tracking. |
-| **Framed 3D Brain View** | **Implemented & Verified** | Scientific HUD frame with `3D BRAIN VIEW`, `1.0mm \| ISOTROPIC`, measurement scale ticks, `4 MRI SEQUENCES`, and `RESEARCH PREVIEW`. |
-| **4-Sequence Upload Panel** | **Implemented & Verified** | Glassmorphic panel with individual slots for T1, T1Gd, T2, and FLAIR. Strictly client-side `.nii` / `.nii.gz` validation, filename display, replace, and removal. |
-| **CTA Smooth-Scroll Interaction** | **Implemented & Verified** | Clicking *"Upload MRI Scan"* smoothly scrolls and highlights the upload panel. |
-| **Local Privacy Guarantee** | **Active** | 100% browser-local handling. No cloud APIs, zero patient data leakage. |
-| **Python Backend & MONAI** | **Planned (P1)** | FastAPI `/api/v1/segment/predict` with MONAI SegResNet 3D sliding window inference. |
+| **Top Navigation** | **Implemented & Verified** | Engraved brain icon, editorial wordmark, `Home` and `Workstation` tabs, quick upload trigger, and `Research Preview` badge. |
+| **Hero Copy & Editorial Typography** | **Implemented & Verified** | Cormorant Garamond serif headline, Plus Jakarta Sans body copy, and 4 modality chips. |
+| **Annotated 2D Brain Illustration** | **Implemented & Verified** | Classical anatomy atlas engraving on `#E9DDD5` with SVG leader lines, hover-responsive pins, and educational functional labels. |
+| **Anatomical Views Rail** | **Implemented & Verified** | Superior, lateral, and ventral reference thumbnails with auto-cycling and manual inspection. |
+| **4-Sequence MRI Upload Workspace** | **Implemented & Verified** | Light cream upload cards with real axial MRI thumbnails, format validation, file size display, replace, and remove. |
+| **Local Privacy Guarantee** | **Active** | Files remain strictly inside browser memory; zero cloud uploads or third-party tracking. |
+| **Analysis CTA State** | **Active & Honest** | Disabled until all 4 sequences are loaded; triggers inference console and displays explicit notice that 3D inference runs once local FastAPI is connected. |
+| **Clinical Workstation & Viewer** | **Implemented & Verified** | Multi-Planar Reconstruction (MPR) linked slice sliders, 3D WebGL mesh inspection, volume quantification, and diagnostic findings report. |
+| **Python Backend & MONAI Pipeline** | **Planned (P1)** | FastAPI `/api/v1/segment/predict` with MONAI SegResNet sliding window inference. |
 
 ---
 
-## 3. 3D Model Provenance & Licensing
-
-- **Asset Path**: `frontend/public/models/brain.glb`
-- **Origin**: Open-source 3D Brain Atlas (`itayinbarr/brainproject`)
-- **Underlying Sources**: Anatomically registered meshes derived from **Z-Anatomy contributors** and **BodyParts3D / DBCLS** (Database Center for Life Science, Japan).
-- **License**: **Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)**.
-- **Attribution**: Derived from the Z-Anatomy and BodyParts3D neuroanatomical open projects.
-
----
-
-## 4. Running the Application
+## 3. Running the Application
 
 ### Development Server
 ```bash
-# From project root:
+# From workspace root:
 npm run dev
 
 # Or from frontend/ directory:
@@ -78,7 +74,7 @@ npm test
 
 ---
 
-## 5. Repository Structure
+## 4. Repository Structure
 
 ```text
 NeuroScope-3D/
@@ -89,47 +85,50 @@ NeuroScope-3D/
 ├── docs/
 │   ├── PROJECT_CONTEXT.md   # Hackathon rules, BraTS 2021 labels, judging metrics
 │   ├── ARCHITECTURE.md      # Data pipeline, component responsibilities, API schema
-│   ├── UI_DESIGN_RULES.md   # Single source of truth for UI, colors, viewports, typography
+│   ├── UI_DESIGN_RULES.md   # Design tokens (Warm Blush & Oxblood), typography, rules
 │   ├── TEAM_WORKFLOW.md     # Branch naming, PR rules, merge conflict prevention
 │   ├── DECISIONS.md         # Architecture Decision Records (ADRs)
 │   ├── ONBOARDING.md        # Step-by-step setup guide for team members (Ayaz & Samir)
 │   └── TASK_BOARD.md        # Prioritized task backlog (P0 to P3)
-└── frontend/                # React 19 + Vite 8 + Three.js + Tailwind CSS UI
+└── frontend/                # React 19 + Vite 8 + Tailwind CSS UI
     ├── public/
+    │   ├── brain_atlas.jpg  # Anatomical illustration asset
     │   ├── draco/           # Draco WASM/JS decoders
     │   └── models/          # Bundled 3D anatomical brain model (brain.glb)
     ├── src/
-    │   ├── assets/          # Static fallback renders (brain-hero.jpg)
+    │   ├── assets/
+    │   │   └── atlas/       # 2D brain atlas illustration, rail, and MRI slice thumbnails
     │   ├── components/
-    │   │   ├── Navbar.jsx   # Minimal header with brain icon, Home link & Upload trigger
-    │   │   ├── Hero.jsx     # Two-column hero with framed 3D view and CTA
-    │   │   ├── Brain3D.jsx  # Real-time Three.js canvas with filaments & pointer parallax
-    │   │   ├── UploadPanel.jsx # 4-sequence NIfTI selection panel with inline validation
+    │   │   ├── Navbar.jsx   # Editorial header with engraved icon, Home & Workstation links
+    │   │   ├── Hero.jsx     # World A: Warm Blush hero with editorial copy & anatomical rail
+    │   │   ├── AnnotatedBrain.jsx # 2D brain illustration with interactive SVG callouts
+    │   │   ├── MriWorkspace.jsx   # World B: Oxblood MRI upload cards & workflow tracker
+    │   │   ├── WorkstationPage.jsx # Clinical 2D MPR & 3D mesh review workstation
     │   │   └── UploadModal.jsx # Full ingestion console with batch drop, progress & volume metrics
     │   ├── services/
     │   │   └── api.js       # Client API service (POST /api/v1/segment/predict) & 1 GiB guard
-    │   ├── App.jsx          # Root container with modal orchestration
-    │   ├── index.css        # Tailwind v4 import and custom effects
+    │   ├── App.jsx          # Root container assembling Hero, Workspace & Workstation
+    │   ├── index.css        # Palette tokens, typography, and subtle float animation
     │   └── main.jsx         # Application entry
     ├── vite.config.js       # Vite configuration with @tailwindcss/vite
-    └── package.json         # Dependencies (three, lucide-react, react 19, tailwind v4)
+    └── package.json         # Lightweight frontend dependencies
 ```
 
 ---
 
-## 6. Member 1 (Frontend & Viewer) Documentation & API Contract
+## 5. Member 1 (Frontend & Viewer) Documentation & API Contract
 
 ### Frontend Architecture
 * **Framework**: React 19 + Vite 8 + Tailwind CSS v4.
-* **3D Graphics**: Three.js (r186) with procedural anatomical brain fallback + Draco-compressed GLTF loader (`/models/brain.glb`).
+* **Design Identity**: Warm Blush (`#E9DDD5`) and Oxblood (`#6D263D` / `#542031`).
 * **Icons**: Lucide React.
 * **Linting**: Oxlint (`npm run lint` targets `src/`, verified 0 errors, 0 warnings).
 
 ### Existing Components & Services
-1. `Navbar.jsx`: Brand wordmark, active navigation pill, and quick "Upload Sequences" trigger.
-2. `Hero.jsx`: Two-column layout pairing editorial copy, visible research disclaimer, 3 core capabilities, and framed 3D interactive viewport.
-3. `Brain3D.jsx`: GPU-accelerated WebGL canvas with ACESFilmic tone mapping, rim lighting, 42-node synaptic network, 180 dust particles, continuous levitation, and pointer parallax.
-4. `UploadPanel.jsx`: Compact, inline 4-sequence slot selector directly under the hero with client-side format & 1 GiB size validation.
+1. `Navbar.jsx`: Editorial brand wordmark, active navigation pill, and quick "Upload Sequences" trigger.
+2. `Hero.jsx`: Warm Blush landing hero with editorial typography, research disclaimer, 4 sequence chips, and multi-view anatomical switcher.
+3. `AnnotatedBrain.jsx`: Classical anatomy atlas engraving with SVG leader lines, hover-responsive pins, and educational functional labels.
+4. `MriWorkspace.jsx`: Oxblood radiological sequence ingestion workspace with 4 individual upload cards, axial slice thumbnails, format validation, and workflow tracker.
 5. `UploadModal.jsx`: Full ingestion workstation supporting batch drag-and-drop auto-detection, optional 5th slot for BraTS ground truth, state machine progression, volume breakdown cards, and abortable requests.
 6. `WorkstationPage.jsx`: Full-featured clinical workstation featuring 4 functional product views:
    * **2D Multi-Planar (MPR)**: Synchronized Axial, Coronal, and Sagittal viewports with BraTS overlays (NETC, ED, ET), modality switcher, slice sliders, and crosshairs.
@@ -217,12 +216,11 @@ npm run build
 
 ### Current Status & Known Limitations
 * **Completed**:
-  * 3D interactive anatomical brain with procedural fallback and Draco loader.
-  * Embedded `UploadPanel` and full `UploadModal` stabilized with 5-stage state machine.
-  * `services/api.js` client integrated with 1 GiB guard and AbortController.
-  * Zero lint errors, zero warnings (`oxlint src` in 42ms).
-  * Fast production build (1.41s).
+  * Merged and verified Sarthak's Warm Blush (`#E9DDD5`) & Oxblood (`#6D263D`) editorial design system.
+  * Interactive 2D anatomical atlas (`AnnotatedBrain.jsx`) with multi-view orientation rail (`superior`, `lateral`, `ventral`).
+  * Dedicated 4-sequence upload workspace (`MriWorkspace.jsx`) with real axial MRI thumbnails and NIfTI client format validation.
+  * Embedded `WorkstationPage` with 2D Multi-Planar (MPR) slices, 3D tumor surface mesh inspection, and volumetrics quantification.
+  * Complete API service (`services/api.js`) with 1 GiB file guard, duplicate file detection, progress tracking, and RFC 7807 error handling.
+  * 12/12 unit tests passing cleanly.
 * **Known Limitations (Pending Phase 2 & Backend)**:
   * Backend server (`uvicorn backend.main:app --reload`) must be running locally to receive uploads; UI presents a clear actionable banner when offline.
-  * Multi-planar linked NiiVue viewer (Axial, Coronal, Sagittal) will be wired to real segmentation mask artifacts in Phase 2.
-

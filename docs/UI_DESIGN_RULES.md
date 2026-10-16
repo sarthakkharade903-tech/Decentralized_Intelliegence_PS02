@@ -1,90 +1,66 @@
-# NeuroScope-3D / NeuroVault: UI Design Rules & Medical Diagnostic Guidelines
+# NeuroVault: UI Design Rules & Editorial Anatomy Guidelines
 
-This document serves as the **single source of truth** for visual design, layout patterns, and user experience across the NeuroScope-3D / NeuroVault application.
-
-> **CRITICAL TEAM POLICY**:
-> Sarthak, Ayaz, and Samir must **not** independently redesign pages or invent new styling paradigms. All developers must use the shared Tailwind design tokens, typography, and component primitives defined in this document. Any proposed change to the visual language must be discussed, agreed upon, and recorded here first.
+This document serves as the **single source of truth** for visual design, layout patterns, and user experience across the NeuroVault platform.
 
 ---
 
-## 1. Visual Theme & Philosophy
-- **Aesthetic**: Minimal Scientific Visualization & Medical Diagnostic Workstation.
-- **Base Theme**: Deep Obsidian Black (`#06080D` root canvas). Dark mode reduces eye fatigue in low-light radiological environments and highlights grayscale MRI sequences and neon tumor masks.
-- **Tone**: Precise, authoritative, distraction-free, accessible, privacy-first.
+## 1. Visual Theme: Dual Worlds Philosophy
+
+NeuroVault departs from generic dark cyber-SaaS aesthetics in favor of a **classical scientific anatomy atlas** aesthetic inspired by Frank Netter and Gray's Anatomy. The interface is composed of two deliberate, visually distinct environments:
+
+### World A: Warm Blush Anatomy Hero
+- **Primary Background**: `#E9DDD5` (Warm Blush / soft parchment pink-beige)
+- **Primary Text**: `#30252A` (Deep plum)
+- **Supporting Accents**: `#6D263D` (Oxblood / burgundy)
+- **Neutral Muted**: `#6E5D65` (Warm muted plum)
+- **Elements**: Editorial serif typography, annotated 2D brain illustration with leader lines, anatomical reference rail.
+
+### World B: Oxblood MRI Workspace
+- **Primary Background**: `#6D263D` (Rich Oxblood)
+- **Container Surfaces**: `#F8F5F0` (Light cream parchment cards)
+- **Accent Wine Surfaces**: `#542031` / `#441A27` (Requirement box, step badges)
+- **Text on Cards**: `#30252A` (Deep plum)
+- **Text on Oxblood**: `#F8F5F0` (Cream / off-white)
+- **Elements**: 4 sequence upload cards (T1, T1Gd, T2, FLAIR) with real axial MRI thumbnails, 4-step workflow tracker, honest analysis CTA.
 
 ---
 
-## 2. Color Palette & Semantic Tokens
+## 2. Typography Hierarchy
 
-### Workstation Surfaces
-| Token | Hex | Usage |
-| :--- | :--- | :--- |
-| `surface-bg-obsidian` | `#06080D` | Root canvas background |
-| `surface-panel` | `#0D111A` / `#080D19` | Primary card panels, sidebar, header |
-| `surface-panel-subtle` | `#0A1120` / `#161D2C` | Upload sequence slots, secondary cards |
-| `surface-border` | `rgba(34, 211, 238, 0.25)` | Subtle cyan-accented container borders |
-
-### Text & Accents
-| Token | Hex | Usage |
-| :--- | :--- | :--- |
-| `text-primary` | `#F8FAFC` | Headings, primary metrics, active values |
-| `text-secondary` | `#94A3B8` | Supporting labels, descriptions, metadata |
-| `accent-cyan` | `#22D3EE` | Primary action glow, active tabs, focus rings |
-| `accent-teal` | `#14B8A6` | Gradients, secondary highlights |
-| `status-success` | `#10B981` | Validation passed, sequence loaded |
-| `status-warning` | `#F59E0B` | Incomplete sequences, missing modality |
-| `status-error` | `#EF4444` | Invalid file format, dimension mismatch, GPU error |
-
-### Standard Tumor Colormap (BraTS Standard)
-Color overlays must be uniform across all viewports:
-| Sub-Region | BraTS Label | Display Color | Hex | Default Opacity |
-| :--- | :--- | :--- | :--- | :--- |
-| **Necrotic Core (NETC)** | 1 | Electric Cyan / Blue | `#06B6D4` | 0.65 |
-| **Peritumoral Edema (ED)** | 2 | Amber / Vivid Yellow | `#EAB308` | 0.50 |
-| **Enhancing Tumor (ET)** | 4 | Vivid Crimson / Red | `#EF4444` | 0.75 |
+- **Headings & Editorial Titles**:
+  - Font Family: `Cormorant Garamond, Georgia, serif`
+  - Headline Size: `text-5xl sm:text-6xl lg:text-7xl font-normal leading-[1.02]`
+  - Workspace Headline: `text-4xl sm:text-5xl font-normal leading-[1.08]`
+- **Body & Controls**:
+  - Font Family: `Plus Jakarta Sans, system-ui, sans-serif`
+  - Body Text: `text-sm sm:text-base text-[#56474E] leading-relaxed`
+  - Labels & Modality Chips: `text-xs font-medium`
+  - Modality Subtitle / Format: `text-[10px] font-mono text-[#8C7C83]`
 
 ---
 
-## 3. Typography & Spacing
-- **Font Family**:
-  - UI & Body: Inter, system-ui, sans-serif (`font-sans`)
-  - Numbers & Metrics: JetBrains Mono / monospace (`font-mono`) for volumetric measurements, coordinates, and sequence tags.
-- **Hierarchy**:
-  - Page Hero Headline: `text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white`
-  - Section Headers: `text-sm font-semibold uppercase tracking-wider text-gray-400`
-  - Body Text: `text-sm sm:text-base text-gray-300 leading-relaxed`
-  - Microcopy / Badges: `text-[10px] sm:text-xs font-mono text-cyan-300`
+## 3. Annotated 2D Brain Illustration Guidelines
+
+1. **Artwork**: Pure classical medical atlas engraving in lateral profile with realistic sulci and gyri, cerebellum, and brainstem.
+2. **Callout Pins**: Circular dual-ring pins (`w-3.5 h-3.5 rounded-full border border-[#8C485A] bg-[#F8F5F0] with inner dot`) positioned precisely over the:
+   - **Frontal Lobe**
+   - **Parietal Lobe**
+   - **Temporal Lobe**
+   - **Occipital Lobe**
+   - **Cerebellum**
+3. **Leader Lines**: Fine SVG elbow lines connecting anchor pins to educational functional labels outside the brain silhouette.
+4. **Motion**: Subtle gentle floating levitation (`animate-subtle-float`). No 3D WebGL rotation or particle fields.
 
 ---
 
-## 4. Real-Time 3D Brain & Visualization Frame
+## 4. MRI Upload Workspace Rules
 
-### 3D Anatomical Brain Guidelines
-- Real anatomical human brain geometry (`brain.glb`) with verified provenance (Z-Anatomy / BodyParts3D CC BY-SA 4.0).
-- **Lighting Model**:
-  - Key front light: Surgical cool white (`#DCF8FF`, intensity 2.2).
-  - Rim lighting: Vivid cyan (`#00F0FF`, intensity 4.8) on back-left, vivid teal (`#00FFC4`, intensity 3.6) on back-right to accentuate sulcal fissures and outer silhouette.
-  - Accent light: Warm amber (`#FFDFBA`, intensity 1.2) for subtle tissue depth.
-- **Neural Filaments & Synapses**: Delicately connected spline lines (`0x22D3EE` / `0x14B8A6`) and glowing node spheres conforming to cortical contours.
-- **Particle Dust**: Sparse ambient particles drifting in a spherical aura.
-- **Interaction**: Pointer-tracking parallax with smooth lerp easing (`0.05`) and slow organic rotation (`0.0018` rad/frame).
-- **Fallback**: Immediate high-contrast static render if WebGL is unavailable.
-
-### Scientific HUD Frame Specifications
-- Rounded corners (`rounded-2xl`), cyan border (`border-cyan-500/30`), dark glassmorphism (`bg-[#060A12]/70 backdrop-blur-md`).
-- Upper-left badge: `• 3D BRAIN VIEW` (pulsing cyan dot).
-- Upper-right indicator: `1.0mm | ISOTROPIC`.
-- Right border: Vertical ruler ticks for scale cues.
-- Bottom-left indicator: `4 MRI SEQUENCES (T1, T1Gd, T2, FLAIR)`.
-- Bottom-right badge: `• RESEARCH PREVIEW`.
-
----
-
-## 5. 4-Sequence Upload Panel Rules
-- Integrated below the hero content with slight layered overlap.
-- Glassmorphic container (`bg-[#080D19]/80 border-cyan-500/25 backdrop-blur-xl`).
-- 4 equal-width slots: **T1**, **T1Gd**, **T2**, **FLAIR**.
-- Immediate client validation: Accepts strictly `.nii` and compound `.nii.gz`.
-- Inline error messages for invalid formats.
-- Smooth replace (`Change`) and removal (`X`) controls.
-- Zero cloud transmission: files remain entirely in browser memory.
+1. **Card Architecture**: Light cream parchment cards (`bg-[#F8F5F0] rounded-2xl p-4 text-[#30252A] shadow-md`).
+2. **Real MRI Thumbnails**: Each card includes an authentic axial brain MRI slice icon corresponding to the modality (T1, T1Gd, T2, FLAIR).
+3. **Sequence Selection**:
+   - Native file inputs accept `.nii` and compound `.nii.gz`.
+   - Drag-and-drop enabled on all cards.
+   - Selected file display includes file name, formatted size in KB/MB, checkmark, and quick `Remove` (`X`).
+4. **Analysis CTA Behavior**:
+   - Disabled when fewer than 4 sequences are assigned.
+   - When all 4 sequences are loaded, transitions to an active state and displays an honest notice regarding local backend connectivity.

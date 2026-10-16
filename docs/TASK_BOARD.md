@@ -12,18 +12,18 @@ This backlog organizes the project into prioritized phases for the 24-hour sprin
 
 ---
 
-## Phase 0: Repository & Environment Setup (P0)
+## Phase 0: Repository & Editorial Redesign (P0)
 
 - [x] **Task 0.1**: Inspect development environment, verify Python 3.11, CUDA, and Node.js.
 - [x] **Task 0.2**: Initialize Git repository and link to remote `sarthakkharade903-tech/NeuroScope-3D`.
 - [x] **Task 0.3**: Establish `.gitignore` to prevent leaks of NIfTI scans, weights, and secrets.
 - [x] **Task 0.4**: Establish comprehensive architecture, UI rules, team workflow, and onboarding documentation.
-- [x] **Task 0.5**: Bootstrap `frontend/` with Vite 8 + React 19 + Tailwind CSS v4 + Three.js + Lucide React.
-- [x] **Task 0.6**: Build NeuroVault Header with brain icon, wordmark, and singular Home navigation.
-- [x] **Task 0.7**: Build Hero Section with "Look deeper. See beyond." typography, modality chips, and CTA.
-- [x] **Task 0.8**: Implement real-time 3D Anatomical Brain visualization in Three.js with cyan/teal rim lighting, neural filaments, synapse nodes, and mouse parallax.
-- [x] **Task 0.9**: Implement Framed 3D Brain View with scientific HUD metadata (`3D BRAIN VIEW`, `1.0mm | ISOTROPIC`, ruler ticks, `4 MRI SEQUENCES`).
-- [x] **Task 0.10**: Build integrated 4-Sequence Upload Panel (T1, T1Gd, T2, FLAIR) with `.nii` / `.nii.gz` client validation, replace, and remove.
+- [x] **Task 0.5**: Bootstrap `frontend/` with Vite 8 + React 19 + Tailwind CSS v4.
+- [x] **Task 0.6**: Build Warm Blush (`#E9DDD5`) Editorial Hero with Cormorant Garamond typography and anatomical sidebar rail.
+- [x] **Task 0.7**: Build Annotated 2D Brain Illustration with interactive SVG leader lines and functional lobe callouts (Frontal, Parietal, Temporal, Occipital, Cerebellum).
+- [x] **Task 0.8**: Build Oxblood (`#6D263D`) MRI Workspace with 4 upload cards (T1, T1Gd, T2, FLAIR) featuring real axial MRI slice thumbnails.
+- [x] **Task 0.9**: Implement 100% browser-local NIfTI validation, drag-and-drop, replace, and remove.
+- [x] **Task 0.10**: Connect smooth scroll navigation from Hero CTA to MRI Workspace.
 - [ ] **Task 0.11**: Create Python 3.11 virtual environment (`.venv`) and define initial `backend/requirements.txt` with PyTorch, MONAI, and FastAPI.
 
 ---

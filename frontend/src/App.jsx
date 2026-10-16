@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
+import MriWorkspace from './components/MriWorkspace';
 import WorkstationPage from './components/WorkstationPage';
 import UploadModal from './components/UploadModal';
 
@@ -8,6 +9,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('landing'); // 'landing' | 'workstation'
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [predictionData, setPredictionData] = useState(null);
+  const workspaceRef = useRef(null);
 
   // Close modal on Escape key press
   useEffect(() => {
@@ -20,6 +22,12 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const handleExploreClick = () => {
+    if (workspaceRef.current) {
+      workspaceRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   // When inference succeeds in modal, load data into workstation and switch view
   const handleInferenceSuccess = (result) => {
     setPredictionData(result);
@@ -28,8 +36,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#06080D] text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Top Navigation with Page Switching */}
+    <div className="min-h-screen bg-[#E9DDD5] text-[#30252A] flex flex-col selection:bg-[#6D263D]/20 selection:text-[#6D263D]">
+      {/* Top Editorial Navigation */}
       <Navbar
         currentPage={currentPage}
         onNavigate={(page) => setCurrentPage(page)}
@@ -38,18 +46,29 @@ export default function App() {
 
       {/* Dynamic Multi-Page Router */}
       {currentPage === 'landing' ? (
-        <main className="flex-1 flex flex-col justify-center">
+        <main className="flex-1 flex flex-col">
+          {/* World A: Warm Blush Anatomy Hero */}
           <Hero
+            onExploreClick={handleExploreClick}
             onOpenUpload={() => setIsUploadOpen(true)}
             onLaunchWorkstation={() => setCurrentPage('workstation')}
           />
+
+          {/* World B: Oxblood MRI Workspace */}
+          <MriWorkspace
+            workspaceRef={workspaceRef}
+            onOpenUpload={() => setIsUploadOpen(true)}
+            onContinueAnalysis={() => setIsUploadOpen(true)}
+          />
         </main>
       ) : (
-        <WorkstationPage
-          onBackToHome={() => setCurrentPage('landing')}
-          onOpenUpload={() => setIsUploadOpen(true)}
-          predictionData={predictionData}
-        />
+        <main className="flex-1 flex flex-col bg-[#06080D]">
+          <WorkstationPage
+            onBackToHome={() => setCurrentPage('landing')}
+            onOpenUpload={() => setIsUploadOpen(true)}
+            predictionData={predictionData}
+          />
+        </main>
       )}
 
       {/* Global Ingestion & Inference Modal */}
@@ -58,7 +77,18 @@ export default function App() {
         onClose={() => setIsUploadOpen(false)}
         onInferenceSuccess={handleInferenceSuccess}
       />
+
+      {/* Editorial Footer (Matching Oxblood Theme) */}
+      <footer className="w-full bg-[#542031] text-[#F8F5F0]/70 py-6 px-6 lg:px-12 border-t border-[#6D263D]">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-sans">
+          <div>
+            <span className="font-semibold text-[#F8F5F0] font-serif text-sm">NeuroVault</span> · Kurukshetra Technical Inauguration & 24h Hackathon
+          </div>
+          <div className="text-[11px] text-[#F8F5F0]/60 text-center sm:text-right">
+            Research and hackathon prototype · AI-predicted candidate regions · Not a certified diagnostic device
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
-
