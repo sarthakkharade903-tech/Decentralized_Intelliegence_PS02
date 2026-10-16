@@ -63,9 +63,17 @@ npm run dev
 ```
 Open **`http://localhost:5173/`** in your browser.
 
-### Production Build Verification
+### Production Build & Lint Verification
 ```bash
+cd frontend
+npm run lint
 npm run build
+```
+
+### Automated Unit Testing (NIfTI & API Contracts)
+```bash
+cd frontend
+npm test
 ```
 
 ---

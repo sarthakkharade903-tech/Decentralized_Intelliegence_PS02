@@ -52,6 +52,18 @@ export default function UploadPanel({ panelRef, onOpenModal }) {
       return;
     }
 
+    // Check for duplicate assignment across slots
+    for (const [key, existingFile] of Object.entries(files)) {
+      if (key !== slotId && existingFile && existingFile.name === file.name && existingFile.size === file.size) {
+        const slotName = SLOTS.find((s) => s.id === key)?.name || key;
+        setErrors((prev) => ({
+          ...prev,
+          [slotId]: `Already assigned to ${slotName}`
+        }));
+        return;
+      }
+    }
+
     setErrors((prev) => ({ ...prev, [slotId]: null }));
     setFiles((prev) => ({ ...prev, [slotId]: file }));
   };
@@ -95,9 +107,15 @@ export default function UploadPanel({ panelRef, onOpenModal }) {
           <div>
             <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight flex items-center gap-2">
               Upload MRI Scan
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-normal">
-                {readyCount}/4 Ready
-              </span>
+              {readyCount === 4 ? (
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 font-normal">
+                  ✓ 4/4 Ready to Ingest
+                </span>
+              ) : (
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-normal">
+                  {readyCount}/4 (Missing: {SLOTS.filter((s) => !files[s.id]).map((s) => s.name).join(', ')})
+                </span>
+              )}
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
               Select the four co-registered MRI sequences (NIfTI format, max 1 GiB each).
