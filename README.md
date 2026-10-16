@@ -162,7 +162,9 @@ The upload interface enforces 5 distinct, mutually exclusive states:
   * `patient_id`: string (optional, default `"ANONYMOUS"`)
 * **Operational Limits**:
   * Max file size: **1 GiB** ($1,073,741,824$ bytes) per file.
-  * Inference timeout: **180 seconds** for 3D sliding window.
+  * Inference timeout: **300 seconds (5 minutes)** for 3D sliding window inference.
+  * Duplicate file detection: Blocks assigning the exact same file to multiple sequence slots.
+  * Malformed response guard: Enforces complete `volumes_ml` object before accepting successful inference.
 * **Success Payload Schema**:
   ```json
   {

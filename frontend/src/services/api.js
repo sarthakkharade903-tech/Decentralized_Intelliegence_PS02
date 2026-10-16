@@ -54,6 +54,46 @@ export function validateNiftiFile(file) {
 }
 
 /**
+ * Validates that an API response contains a complete, well-formed segmentation payload.
+ * Prevents malformed or partial output from being mistaken for a valid prediction.
+ *
+ * @param {any} data
+ * @returns {{ valid: boolean, error?: string }}
+ */
+export function validatePredictionResponse(data) {
+  if (!data || typeof data !== 'object') {
+    return { valid: false, error: 'Server returned empty or non-JSON response.' };
+  }
+
+  // Check if payload declares an error state despite HTTP 200
+  if (data.status === 'error' || data.error) {
+    return {
+      valid: false,
+      error: data.message || (typeof data.error === 'string' ? data.error : 'Segmentation processing failed on backend.')
+    };
+  }
+
+  // Enforce existence of physical volume metrics
+  if (!data.volumes_ml || typeof data.volumes_ml !== 'object') {
+    return {
+      valid: false,
+      error: 'Malformed API response: missing required "volumes_ml" quantification from backend.'
+    };
+  }
+
+  // Enforce existence of core BraTS evaluation regions (WT, TC, ET)
+  const { whole_tumor, tumor_core, enhancing_tumor } = data.volumes_ml;
+  if (whole_tumor == null || tumor_core == null || enhancing_tumor == null) {
+    return {
+      valid: false,
+      error: 'Malformed API response: incomplete volume metrics (missing WT, TC, or ET volume values).'
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
  * Checks backend health and GPU readiness.
  *
  * @param {AbortSignal} [signal]
@@ -189,13 +229,17 @@ export async function predictSegmentation({
       }
 
       if (xhr.status >= 200 && xhr.status < 300) {
-        if (data) {
-          resolve(data);
-        } else {
-          const err = new Error('Server returned empty or non-JSON response.');
+        const check = validatePredictionResponse(data);
+        if (!check.valid) {
+          const err = new Error(check.error);
           err.status = xhr.status;
+          err.detail = data?.detail || data || null;
+          err.errorCode = data?.error || null;
           reject(err);
+          return;
         }
+
+        resolve(data);
       } else {
         // Structured error extraction
         let errorMessage = 'Inference request failed.';
