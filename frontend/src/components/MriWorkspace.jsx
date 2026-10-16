@@ -1,5 +1,17 @@
 import React, { useRef, useState } from 'react';
-import { Upload, FileText, CheckCircle2, X, AlertCircle, RotateCcw, BarChart3, Info } from 'lucide-react';
+import {
+  Upload,
+  FileText,
+  CheckCircle2,
+  X,
+  AlertCircle,
+  BarChart3,
+  Info,
+  Loader2,
+  AlertTriangle,
+  RotateCcw
+} from 'lucide-react';
+import { validateNiftiFile, predictSegmentation } from '../services/api';
 import thumbT1 from '../assets/atlas/thumb_t1.png';
 import thumbT1Gd from '../assets/atlas/thumb_t1gd.png';
 import thumbT2 from '../assets/atlas/thumb_t2.png';
@@ -32,14 +44,7 @@ const SEQUENCES = [
   }
 ];
 
-const WORKFLOW_STEPS = [
-  { step: '1', label: 'Upload Scans', active: true },
-  { step: '2', label: 'Process', active: false },
-  { step: '3', label: 'View Results', active: false },
-  { step: '4', label: 'Explore & Analyze', active: false }
-];
-
-export default function MriWorkspace({ workspaceRef }) {
+export default function MriWorkspace({ workspaceRef, onInferenceSuccess }) {
   const [files, setFiles] = useState({
     t1: null,
     t1gd: null,
@@ -55,7 +60,10 @@ export default function MriWorkspace({ workspaceRef }) {
   });
 
   const [activeTooltip, setActiveTooltip] = useState(null);
-  const [analysisStatus, setAnalysisStatus] = useState(null);
+  // 'idle' | 'uploading' | 'inferring' | 'error' | 'success'
+  const [analysisStatus, setAnalysisStatus] = useState('idle');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [analysisError, setAnalysisError] = useState(null);
 
   const fileInputRefs = {
     t1: useRef(null),
@@ -64,10 +72,7 @@ export default function MriWorkspace({ workspaceRef }) {
     flair: useRef(null)
   };
 
-  const validateNifti = (filename) => {
-    const lower = filename.toLowerCase();
-    return lower.endsWith('.nii') || lower.endsWith('.nii.gz');
-  };
+  const abortControllerRef = useRef(null);
 
   const formatFileSize = (bytes) => {
     if (!bytes) return '0 B';
@@ -80,12 +85,26 @@ export default function MriWorkspace({ workspaceRef }) {
   const handleSelectFile = (seqId, file) => {
     if (!file) return;
 
-    if (!validateNifti(file.name)) {
+    // Use api.js validation (extension, size, empty)
+    const validation = validateNiftiFile(file);
+    if (!validation.valid) {
       setErrors((prev) => ({
         ...prev,
-        [seqId]: 'Unsupported format. Requires .nii or .nii.gz'
+        [seqId]: validation.error
       }));
       return;
+    }
+
+    // Check for duplicate file assignment across slots
+    for (const [key, existingFile] of Object.entries(files)) {
+      if (key !== seqId && existingFile && existingFile.name === file.name && existingFile.size === file.size) {
+        const otherName = SEQUENCES.find((s) => s.id === key)?.name || key;
+        setErrors((prev) => ({
+          ...prev,
+          [seqId]: `Duplicate file: Already assigned to ${otherName}`
+        }));
+        return;
+      }
     }
 
     setErrors((prev) => ({ ...prev, [seqId]: null }));
@@ -116,10 +135,55 @@ export default function MriWorkspace({ workspaceRef }) {
   const uploadedCount = Object.values(files).filter(Boolean).length;
   const allUploaded = uploadedCount === 4;
 
-  const handleContinueAnalysis = () => {
+  const handleContinueAnalysis = async () => {
     if (!allUploaded) return;
-    setAnalysisStatus('standby');
+
+    setAnalysisStatus('uploading');
+    setUploadProgress(0);
+    setAnalysisError(null);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const result = await predictSegmentation({
+        t1: files.t1,
+        t1gd: files.t1gd,
+        t2: files.t2,
+        flair: files.flair,
+        onProgress: (percent) => {
+          setUploadProgress(percent);
+          if (percent >= 100) {
+            setAnalysisStatus('inferring');
+          }
+        },
+        signal: controller.signal
+      });
+
+      setAnalysisStatus('success');
+      if (onInferenceSuccess) {
+        onInferenceSuccess(result);
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        setAnalysisStatus('idle');
+        return;
+      }
+      setAnalysisStatus('error');
+      setAnalysisError(
+        err.message || 'Unable to connect to FastAPI backend at http://localhost:8000.'
+      );
+    }
   };
+
+  // Dynamic step tracker reflecting live pipeline state
+  const isProcessing = analysisStatus === 'uploading' || analysisStatus === 'inferring';
+  const workflowSteps = [
+    { step: '1', label: 'Upload Scans', active: !allUploaded && analysisStatus === 'idle' },
+    { step: '2', label: 'Process', active: isProcessing },
+    { step: '3', label: 'View Results', active: analysisStatus === 'success' },
+    { step: '4', label: 'Explore & Analyze', active: false }
+  ];
 
   return (
     <section
@@ -143,12 +207,12 @@ export default function MriWorkspace({ workspaceRef }) {
               Select the four MRI sequences (NIfTI format) to get started.
             </p>
 
-            {/* Workflow Step Indicator */}
+            {/* Dynamic Workflow Step Indicator */}
             <div className="pt-4 flex flex-col space-y-2.5">
-              {WORKFLOW_STEPS.map((s) => (
+              {workflowSteps.map((s) => (
                 <div key={s.step} className="flex items-center gap-3">
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
                       s.active
                         ? 'bg-[#F8F5F0] text-[#6D263D]'
                         : 'bg-[#542031] text-[#F8F5F0]/60 border border-[#8C3A52]/40'
@@ -157,8 +221,8 @@ export default function MriWorkspace({ workspaceRef }) {
                     {s.step}
                   </div>
                   <span
-                    className={`text-xs font-medium ${
-                      s.active ? 'text-[#F8F5F0]' : 'text-[#F8F5F0]/60'
+                    className={`text-xs font-medium transition-colors ${
+                      s.active ? 'text-[#F8F5F0] font-semibold' : 'text-[#F8F5F0]/60'
                     }`}
                   >
                     {s.label}
@@ -270,11 +334,11 @@ export default function MriWorkspace({ workspaceRef }) {
                         </div>
                       )}
 
-                      {/* Format Error */}
+                      {/* Format / Duplicate Error */}
                       {error && (
                         <div className="mt-2 p-1.5 rounded bg-rose-100 border border-rose-300 text-[10px] text-rose-800 flex items-center gap-1">
                           <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                          <span className="truncate">{error}</span>
+                          <span className="truncate" title={error}>{error}</span>
                         </div>
                       )}
                     </div>
@@ -285,7 +349,7 @@ export default function MriWorkspace({ workspaceRef }) {
           </div>
         </div>
 
-        {/* Bottom Requirement Banner & Honest Analysis CTA */}
+        {/* Bottom Requirement Banner & Action CTA */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center pt-2">
           
           {/* Requirement Notice Box */}
@@ -298,7 +362,7 @@ export default function MriWorkspace({ workspaceRef }) {
                 All four sequences are required
               </h5>
               <p className="text-[11px] sm:text-xs text-[#F8F5F0]/75 mt-0.5 leading-normal">
-                T1, T1Gd, T2, and FLAIR help the model identify and segment tumor regions more accurately.
+                T1, T1Gd, T2, and FLAIR help the model identify and segment tumor regions accurately.
               </p>
             </div>
           </div>
@@ -307,32 +371,90 @@ export default function MriWorkspace({ workspaceRef }) {
           <div className="lg:col-span-4 flex justify-end">
             <button
               onClick={handleContinueAnalysis}
-              disabled={!allUploaded}
+              disabled={!allUploaded || isProcessing}
               className={`w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl font-medium text-xs sm:text-sm transition-all duration-300 ${
-                allUploaded
+                allUploaded && !isProcessing
                   ? 'bg-[#F8F5F0] text-[#6D263D] hover:bg-white shadow-md cursor-pointer font-semibold'
                   : 'bg-[#4C1929] text-[#A66E80] border border-[#6B283C] cursor-not-allowed opacity-80'
               }`}
             >
-              <BarChart3 className="w-4 h-4" />
-              <span>Continue to analysis</span>
-              <span>→</span>
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-[#6D263D]" />
+                  <span>{analysisStatus === 'uploading' ? `Uploading (${uploadProgress}%)` : 'Inferring 3D...'}</span>
+                </>
+              ) : (
+                <>
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Continue to analysis</span>
+                  <span>→</span>
+                </>
+              )}
             </button>
           </div>
 
         </div>
 
-        {/* Honest Inference Standby Notification */}
-        {analysisStatus === 'standby' && (
+        {/* Live Upload Progress Notification */}
+        {analysisStatus === 'uploading' && (
+          <div className="p-4 rounded-xl bg-[#542031] border border-[#8C3A52]/60 space-y-2 text-xs text-[#F8F5F0] animate-in fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Ingesting MRI Sequences via Multipart Stream...
+              </span>
+              <span className="font-mono">{uploadProgress}%</span>
+            </div>
+            <div className="w-full bg-[#441A27] h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-[#F8F5F0] h-full transition-all duration-200"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Live Inference Execution Notification */}
+        {analysisStatus === 'inferring' && (
           <div className="p-4 rounded-xl bg-[#542031] border border-[#8C3A52]/60 flex items-start gap-3 text-xs text-[#F8F5F0] animate-in fade-in duration-200">
-            <Info className="w-4 h-4 text-[#F8F5F0] flex-shrink-0 mt-0.5" />
+            <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 mt-0.5 text-cyan-300" />
             <div>
               <p className="font-semibold text-[#F8F5F0]">
-                Ready for Local Inference Pipeline
+                Running 3D Sliding Window Inference...
               </p>
               <p className="text-[11px] text-[#F8F5F0]/80 mt-1 leading-relaxed">
-                All 4 sequences (<span className="font-mono text-[#F8F5F0]">T1, T1Gd, T2, FLAIR</span>) are loaded locally in browser memory. Once the local Python FastAPI backend (<code className="font-mono bg-[#441A27] px-1.5 py-0.5 rounded">/api/v1/segment/predict</code>) is connected, MONAI SegResNet 3D sliding-window inference will delineate tumor margins. No fabricated predictions or synthetic volumes are displayed.
+                Preprocessing scans, resampling to isotropic grid, and executing MONAI SegResNet. Results will open in the 3D Workstation automatically.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Honest Backend Connection Error Feedback */}
+        {analysisStatus === 'error' && (
+          <div className="p-4 rounded-xl bg-rose-950/80 border border-rose-800/80 flex flex-col sm:flex-row items-start justify-between gap-4 text-xs text-rose-200 animate-in fade-in duration-200">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-rose-100">
+                  Backend Connection Notice
+                </p>
+                <p className="text-[11px] text-rose-200/90 mt-1 leading-relaxed max-w-xl">
+                  {analysisError}
+                </p>
+                <p className="text-[10px] text-rose-300/70 mt-1 font-mono">
+                  Target: POST http://localhost:8000/api/v1/segment/predict
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
+              <button
+                onClick={handleContinueAnalysis}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-900 text-rose-100 hover:bg-rose-800 border border-rose-700 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Retry</span>
+              </button>
             </div>
           </div>
         )}

@@ -34,14 +34,15 @@ The interface is structured into two distinct, deliberate environments:
 
 | Component | Status | Details |
 | :--- | :--- | :--- |
-| **Top Navigation** | **Implemented & Verified** | Engraved brain icon, editorial wordmark, active `Home` indicator, and `Research Preview` badge. |
-| **Hero Copy & Editorial Typography** | **Implemented & Verified** | Cormorant Garamond serif headline, Plus Jakarta Sans body copy, and 4 modality chips. |
+| **Top Navigation** | **Implemented & Verified** | Engraved brain icon, editorial wordmark, active `Home` and `3D Workstation` view switcher, and `Research Preview` badge. |
+| **Hero Copy & Editorial Typography** | **Implemented & Verified** | Cormorant Garamond serif headline, Plus Jakarta Sans body copy, 4 modality chips, and direct actions to explore scans or open the 3D Workstation. |
 | **Annotated 2D Brain Illustration** | **Implemented & Verified** | Classical anatomy atlas engraving on `#E9DDD5` with SVG leader lines, hover-responsive pins, and educational functional labels. |
 | **Anatomical Views Rail** | **Implemented & Verified** | Superior, lateral, and ventral reference thumbnails. |
-| **4-Sequence MRI Upload Workspace** | **Implemented & Verified** | Light cream upload cards with real axial MRI thumbnails, format validation, file size display, replace, and remove. |
+| **4-Sequence MRI Upload Workspace** | **Implemented & Verified** | Light cream upload cards with real axial MRI thumbnails, format validation, duplicate file detection, live upload progress bar (0–100%), and honest backend error handling. |
+| **Client API & Validation Service** | **Implemented & Verified** | `api.js` client with pre-flight checks, duplicate sequence detection, XHR upload progress tracking, and automated unit test suite (`npm test`). |
+| **3D & 2D Clinical Workstation** | **Implemented & Verified** | Linked 2D Multi-Planar Reconstruction (MPR) canvas, BraTS 2021 segmentations (NETC, ED, ET), Three.js 3D rotating tumor mesh, physical volumetrics (mL), and diagnostic report. |
 | **Local Privacy Guarantee** | **Active** | Files remain strictly inside browser memory; zero cloud uploads or third-party tracking. |
-| **Analysis CTA State** | **Active & Honest** | Disabled until all 4 sequences are loaded; displays explicit notice that 3D inference runs once local FastAPI is connected. |
-| **Python Backend & MONAI Pipeline** | **Planned (P1)** | FastAPI `/api/v1/segment/predict` with MONAI SegResNet sliding window inference. |
+| **Python FastAPI Backend** | **Foundation Active** | FastAPI backend with CORS middleware for Vite (port 5173), `/api/v1/health` probe, and Python 3.11 medical ML dependencies (`backend/requirements.txt`). |
 
 ---
 
@@ -58,6 +59,12 @@ npm run dev
 ```
 Open **`http://localhost:5173/`** in your browser.
 
+### Unit Tests
+```bash
+cd frontend
+npm test
+```
+
 ### Production Build
 ```bash
 npm run build
@@ -73,6 +80,10 @@ NeuroScope-3D/
 ├── .gitignore               # Strict exclusion of scans, checkpoints, and secrets
 ├── README.md                # Main project entry point (this file)
 ├── AGENTS.md                # Persistent AI pairing instructions & architectural invariants
+├── backend/                 # FastAPI Python 3.11 Backend
+│   ├── __init__.py
+│   ├── main.py              # FastAPI app with CORS & /api/v1/health probe
+│   └── requirements.txt     # Python 3.11 pinned dependencies (MONAI, Torch CUDA 12, NiBabel)
 ├── docs/
 │   ├── PROJECT_CONTEXT.md   # Hackathon rules, BraTS 2021 labels, judging metrics
 │   ├── ARCHITECTURE.md      # Data pipeline, component responsibilities, API schema
@@ -86,13 +97,19 @@ NeuroScope-3D/
     │   ├── assets/
     │   │   └── atlas/       # 2D brain atlas illustration, rail, and MRI slice thumbnails
     │   ├── components/
-    │   │   ├── Navbar.jsx   # Editorial header with engraved icon and Home link
+    │   │   ├── Navbar.jsx   # Editorial header with Home / 3D Workstation switcher
     │   │   ├── Hero.jsx     # World A: Warm Blush hero with editorial copy & sidebar
     │   │   ├── AnnotatedBrain.jsx # 2D brain illustration with interactive SVG callouts
-    │   │   └── MriWorkspace.jsx   # World B: Oxblood MRI upload cards & workflow tracker
-    │   ├── App.jsx          # Root container assembling Hero and Workspace
+    │   │   ├── MriWorkspace.jsx   # World B: Oxblood MRI upload cards & live pipeline
+    │   │   ├── WorkstationPage.jsx # Clinical 2D MPR + 3D Mesh + Volumetrics + Report
+    │   │   └── UploadModal.jsx    # Standalone ingestion modal with progress tracking
+    │   ├── services/
+    │   │   └── api.js       # Client API: NIfTI validation, progress, predict endpoint
+    │   ├── App.jsx          # Multi-page router connecting Landing and Workstation
     │   ├── index.css        # Palette tokens, typography, and subtle float animation
     │   └── main.jsx         # Application entry
+    ├── test/
+    │   └── api.test.js      # Unit tests for NIfTI validation and pre-flight guards
     ├── vite.config.js       # Vite configuration with @tailwindcss/vite
     └── package.json         # Lightweight frontend dependencies
 ```

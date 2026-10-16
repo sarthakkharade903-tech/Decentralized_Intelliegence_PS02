@@ -1,0 +1,38 @@
+# ============================================================
+# NeuroScope-3D Backend Dependencies
+# Python 3.11 ONLY (see AGENTS.md §3 Technology Guardrails)
+# ============================================================
+
+# --- Web Framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20     # multipart/form-data file uploads
+
+# --- Pydantic (FastAPI schema validation) ---
+pydantic==2.10.4
+
+# --- Medical Imaging Core ---
+nibabel==5.3.2               # NIfTI read/write, affine matrix handling
+SimpleITK==2.4.1             # Resampling, reorientation, spatial transforms
+scipy==1.14.1                # Marching Cubes (scipy.ndimage), signal processing
+scikit-image==0.24.0         # skimage.measure.marching_cubes for mesh extraction
+
+# --- Numerical / Array ---
+numpy==1.26.4                # Pinned: last version with stable PyTorch/MONAI compat on Py3.11
+
+# --- Deep Learning: PyTorch (CUDA 12.x for RTX 3050) ---
+# Install manually if wheel not found:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1
+torchvision==0.20.1
+
+# --- MONAI Medical AI ---
+monai[all]==1.4.0            # Includes sliding window inferer, SegResNet, transforms
+
+# --- Report Generation ---
+reportlab==4.2.5             # PDF clinical summary report
+
+# --- Utilities ---
+python-jose==3.3.0           # JWT (future auth, optional)
+httpx==0.28.1                # Async HTTP client (for testing / model zoo fetch)
+tqdm==4.67.1                 # Progress bars during inference

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, ShieldCheck, UploadCloud, RotateCcw } from 'lucide-react';
+import { ArrowRight, ShieldCheck, UploadCloud } from 'lucide-react';
 import AnnotatedBrain from './AnnotatedBrain';
 import thumbSuperior from '../assets/atlas/view_thumb_superior.png';
 import thumbLateral from '../assets/atlas/view_thumb_lateral.png';
@@ -26,7 +26,7 @@ const VIEW_OPTIONS = [
   }
 ];
 
-export default function Hero({ onExploreClick }) {
+export default function Hero({ onExploreClick, onLaunchWorkstation }) {
   const [activeView, setActiveView] = useState('lateral');
   const [isAutoCycling, setIsAutoCycling] = useState(true);
 
@@ -91,7 +91,7 @@ export default function Hero({ onExploreClick }) {
 
             {/* Primary CTA Button & Privacy Statement */}
             <div className="pt-2 space-y-4">
-              <div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <button
                   onClick={onExploreClick}
                   className="group inline-flex items-center justify-center gap-3 px-7 py-3.5 rounded-full font-medium text-sm text-[#F8F5F0] bg-[#6D263D] hover:bg-[#581D30] transition-all duration-300 shadow-[0_6px_20px_rgba(109,38,61,0.25)] hover:shadow-[0_8px_25px_rgba(109,38,61,0.35)] hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
@@ -100,6 +100,16 @@ export default function Hero({ onExploreClick }) {
                   <span>Explore with MRI scans</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
+
+                {onLaunchWorkstation && (
+                  <button
+                    onClick={onLaunchWorkstation}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-full text-xs font-semibold text-[#6D263D] bg-transparent border border-[#6D263D]/40 hover:bg-[#6D263D]/10 transition-colors cursor-pointer"
+                  >
+                    <span>Open 3D Workstation</span>
+                    <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-[#6D263D]/10">3D</span>
+                  </button>
+                )}
               </div>
 
               {/* Privacy-Conscious Statement */}

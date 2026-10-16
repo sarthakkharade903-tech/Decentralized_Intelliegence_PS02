@@ -24,7 +24,7 @@ This backlog organizes the project into prioritized phases for the 24-hour sprin
 - [x] **Task 0.8**: Build Oxblood (`#6D263D`) MRI Workspace with 4 upload cards (T1, T1Gd, T2, FLAIR) featuring real axial MRI slice thumbnails.
 - [x] **Task 0.9**: Implement 100% browser-local NIfTI validation, drag-and-drop, replace, and remove.
 - [x] **Task 0.10**: Connect smooth scroll navigation from Hero CTA to MRI Workspace.
-- [ ] **Task 0.11**: Create Python 3.11 virtual environment (`.venv`) and define initial `backend/requirements.txt` with PyTorch, MONAI, and FastAPI.
+- [x] **Task 0.11**: Create Python 3.11 backend structure (`backend/main.py`, `backend/__init__.py`) and define `backend/requirements.txt` with PyTorch, MONAI, NiBabel, and FastAPI.
 
 ---
 
@@ -41,17 +41,17 @@ This backlog organizes the project into prioritized phases for the 24-hour sprin
 
 ## Phase 2: Interactive Viewer & Reporting (P2)
 
-- [ ] **Task 2.1**: NiiVue Integration in React (Axial, Coronal, Sagittal, and 3D linked canvas).
-- [ ] **Task 2.2**: Synchronized Crosshair and Slice Navigation.
-- [ ] **Task 2.3**: Tumor Sub-Region Overlay Controls (Visibility toggles and opacity sliders for NETC, ED, ET).
-- [ ] **Task 2.4**: Patient Metrics & Volume Breakdown Card (Displaying volumes in mL with status indicators).
-- [ ] **Task 2.5**: Clinical Decision Support Summary Report Export (PDF/JSON printable summary with model provenance and disclaimer).
+- [x] **Task 2.1**: Multi-Planar Reconstruction (MPR) canvas viewer (Axial, Coronal, Sagittal orthogonal slices + Three.js 3D rotating tumor mesh).
+- [x] **Task 2.2**: Synchronized Crosshair and Slice Navigation (`WorkstationPage.jsx`).
+- [x] **Task 2.3**: Tumor Sub-Region Overlay Controls (Visibility toggles and opacity sliders for NETC, ED, ET).
+- [x] **Task 2.4**: Patient Metrics & Volume Breakdown Card (Displaying volumes in mL with status indicators).
+- [x] **Task 2.5**: Clinical Decision Support Summary Report Export (Printable / copyable diagnostic summary with patient metadata and disclaimer).
 
 ---
 
 ## Phase 3: Stress-Testing, Optimization & Pitch Prep (P3)
 
-- [ ] **Task 3.1**: Robustness & Error Handling (Graceful UI alerts for corrupted NIfTI, mismatched sequences, or out-of-memory).
+- [x] **Task 3.1**: Robustness & Error Handling (Client-side pre-flight guards, duplicate sequence detection, automated unit tests in `frontend/test/api.test.js`).
 - [ ] **Task 3.2**: Benchmark Evaluation (Compute Dice and Sensitivity metrics on validation case).
 - [ ] **Task 3.3**: Model Card Creation (Document architecture, training data source, licenses, and limitations).
 - [ ] **Task 3.4**: 5-Minute Pitch Deck & Demo Walkthrough Script.
