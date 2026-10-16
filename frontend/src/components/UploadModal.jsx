@@ -662,7 +662,7 @@ export default function UploadModal({ isOpen, onClose, onInferenceSuccess }) {
               <button
                 onClick={() => {
                   if (onInferenceSuccess && predictionResult) {
-                    onInferenceSuccess(predictionResult);
+                    onInferenceSuccess(predictionResult, files);
                   } else {
                     onClose();
                   }

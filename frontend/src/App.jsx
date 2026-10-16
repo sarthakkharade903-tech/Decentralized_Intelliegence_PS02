@@ -9,6 +9,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('landing'); // 'landing' | 'workstation'
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [predictionData, setPredictionData] = useState(null);
+  const [sessionFiles, setSessionFiles] = useState(null);
   const workspaceRef = useRef(null);
 
   // Close modal on Escape key press
@@ -29,8 +30,9 @@ export default function App() {
   };
 
   // When inference succeeds in modal, load data into workstation and switch to results view
-  const handleInferenceSuccess = (result) => {
+  const handleInferenceSuccess = (result, files = null) => {
     setPredictionData(result);
+    if (files) setSessionFiles(files);
     setIsUploadOpen(false);
     setCurrentPage('results');
   };
@@ -68,6 +70,7 @@ export default function App() {
             onBackToHome={() => setCurrentPage('landing')}
             onOpenUpload={() => setIsUploadOpen(true)}
             predictionData={predictionData}
+            sessionFiles={sessionFiles}
             initialTab={currentPage === 'results' ? 'volumetrics' : 'mpr'}
           />
         </main>

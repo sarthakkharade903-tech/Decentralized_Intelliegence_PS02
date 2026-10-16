@@ -316,3 +316,22 @@ export async function downloadArtifact(url, filename = 'segmentation_result.nii.
   document.body.removeChild(a);
   URL.revokeObjectURL(objectUrl);
 }
+
+/**
+ * Fetches a binary artifact as a Blob directly into memory for visualization (e.g. NiiVue).
+ *
+ * @param {string} url - Artifact URL (relative or absolute)
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<Blob>}
+ */
+export async function fetchArtifactBlob(url, signal) {
+  const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+  const response = await fetch(fullUrl, { method: 'GET', signal });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch artifact: HTTP ${response.status} (${response.statusText})`);
+  }
+
+  return await response.blob();
+}
+

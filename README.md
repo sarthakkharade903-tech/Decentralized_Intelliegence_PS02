@@ -214,13 +214,58 @@ npm run lint
 npm run build
 ```
 
-### Current Status & Known Limitations
-* **Completed**:
-  * Merged and verified Sarthak's Warm Blush (`#E9DDD5`) & Oxblood (`#6D263D`) editorial design system.
+### Current Status & Verification
+* **Completed (Phase 1 to Phase 5)**:
+  * Merged and verified Sarthak's Warm Blush (`#E9DDD5`) & Oxblood (`#6D263D`) editorial design system with Cormorant Garamond headings and Plus Jakarta Sans copy.
   * Interactive 2D anatomical atlas (`AnnotatedBrain.jsx`) with multi-view orientation rail (`superior`, `lateral`, `ventral`).
   * Dedicated 4-sequence upload workspace (`MriWorkspace.jsx`) with real axial MRI thumbnails and NIfTI client format validation.
-  * Embedded `WorkstationPage` with 2D Multi-Planar (MPR) slices, 3D tumor surface mesh inspection, and volumetrics quantification.
   * Complete API service (`services/api.js`) with 1 GiB file guard, duplicate file detection, progress tracking, and RFC 7807 error handling.
-  * 12/12 unit tests passing cleanly.
-* **Known Limitations (Pending Phase 2 & Backend)**:
-  * Backend server (`uvicorn backend.main:app --reload`) must be running locally to receive uploads; UI presents a clear actionable banner when offline.
+  * **Real 2D Multi-Planar MRI Viewer (`@niivue/niivue: ^0.69.0`)**:
+    * Full WebGL orthogonal multi-planar reconstruction (MPR) rendering Axial, Coronal, and Sagittal planes simultaneously.
+    * Real NIfTI volume loading from uploaded session files (`.nii`, `.nii.gz`) and backend prediction artifacts (`/api/v1/artifacts/{id}_seg.nii.gz`).
+    * Synchronized crosshair navigation across all 3 orthogonal planes.
+    * Modality sequence switcher (`ModalityBar.jsx`) allowing instant switching between T1, T1-CE (T1gd), T2, and FLAIR.
+    * Discrete BraTS 2021 segmentation colormap with individual region toggles:
+      * **NETC (Label 1, Cyan `#06B6D4`)**: Necrotic & Non-Enhancing Tumor Core
+      * **ED (Label 2, Yellow `#EAB308`)**: Peritumoral Vasogenic Edema
+      * **ET (Label 4, Red `#EF4444`)**: Enhancing Active Margin
+      * Quick clinical presets: Whole Tumor (`WT`), Tumor Core (`TC`), Enhancing (`ET`), and Off.
+    * Overlay opacity slider (0% to 100%) and clear provenance badge (AI Model Prediction vs Ground-Truth Mask).
+    * Precision orthogonal slice scrubbers (`SliceControls.jsx`) and Window/Level (Contrast & Brightness).
+    * Real-time spatial telemetry panel (`CoordinatePanel.jsx`): Voxel index `(i, j, k)`, world coordinates in millimetres `(RAS+)`, MRI intensity, and tissue classification.
+    * Strict pre-flight geometry validation (`GeometryValidator.js`): Rejects misaligned masks (dimension mismatch or voxel spacing delta $> 0.05$ mm) to prevent false clinical localization.
+    * Safe WebGL resource management: Object URLs tracked and explicitly revoked via `URL.revokeObjectURL` on unmount or file switch to prevent memory leaks.
+  * **Real 3D Interactive Patient-Specific Tumor Visualization (`Three.js: ^0.186.1`)**:
+    * **Surface Extraction Pipeline (`SurfaceExtractor.js`)**:
+      * Pure JavaScript Paul Bourke Marching Cubes algorithm with 256-entry edge and triangle lookup tables (`EDGE_TABLE`, `TRI_TABLE`).
+      * Direct decompression and parsing of NIfTI volumes (`.nii` and `.nii.gz`) via `nifti-reader-js`.
+      * Subvolume bounding box extraction (`computeLabelBounds`) with 1-voxel padding to guarantee smooth closed isosurfaces.
+      * Exact NIfTI 4x4 affine matrix coordinate transformation ($P_{\text{world}} = A \cdot [i, j, k, 1]^T$) into physical world space millimetres (`RAS+`).
+      * Unified tumor centroid computation (`computeTumorCentroid`) for multi-region camera centering.
+    * **Interactive 3D WebGL Viewport (`Segmentation3DViewer.jsx`)**:
+      * OrbitControls with smooth damping, 360° orbit rotation, pan, zoom, and auto-rotation toggle with pause on interaction.
+      * Camera view presets: Isometric, Axial (Superior), Coronal (Anterior), Sagittal (Lateral), and Reset Camera.
+      * Individual BraTS 2021 tumor sub-region rendering with medically appropriate materials:
+        * **NETC (Label 1, Cyan `#06B6D4`)**: Semi-translucent necrotic core
+        * **ED (Label 2, Yellow `#EAB308`)**: Transparent peritumoral vasogenic edema envelope
+        * **ET (Label 4, Red `#EF4444`)**: Emissive enhancing active margin
+      * Composite quick toggles: Whole Tumor (`WT` = 1+2+4) and Tumor Core (`TC` = 1+4).
+      * Per-region opacity slider, wireframe render mode toggle, tight 3D bounding caliper wireframe with physical dimensions ($L_x \times L_y \times L_z$ in mm), and `RAS+` orientation axes.
+      * Honest provenance badge ("AI Prediction (MONAI)" vs "Ground Truth (Expert)" vs "No Mask Loaded").
+      * Honest empty states: If 0 tumor voxels exist or no mask is loaded, clearly informs the clinician without displaying synthetic placeholder geometry.
+      * WebGL resource lifecycle: Complete disposal of geometries, materials, controls, and renderer on unmount to prevent browser memory leaks.
+    * **Seamless 2D/3D Synchronization**:
+      * Shared visibility toggles (`showNETC`, `showED`, `showET`) and opacity across 2D multiplanar and 3D surface tabs in `WorkstationPage.jsx`.
+  * **Automated Test Suite**:
+    * **33/33 frontend unit & integration tests passing** across 11 suites (`npm test`):
+      * 12 API service & NIfTI client validation tests
+      * 10 Viewer geometry, affine transform, and discrete colormap tests
+      * 11 3D surface extraction, bounding box, affine transform, and real backend artifact tests (`surface.test.js`)
+    * **0 lint errors, 0 warnings** across all 19 files (`npm run lint`).
+    * **Production build verified** in 1.42s (`npm run build`).
+
+* **Inference Hardware & Backend Contract**:
+  * Connected to Member 2's FastAPI + MONAI backend (`POST /api/v1/segment/predict`).
+  * Backend verified running locally on CUDA GPU (NVIDIA RTX) with 41/41 passing backend unit tests.
+  * Backend artifact retrieval endpoint: `GET /api/v1/artifacts/{filename:path}`.
+
