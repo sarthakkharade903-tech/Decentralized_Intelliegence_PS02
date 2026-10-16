@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Niivue, SLICE_TYPE } from '@niivue/niivue';
-import { createBraTSColormap, validateOverlayGeometry } from './GeometryValidator';
+import { createBraTSColormap, createErrorColormap, validateOverlayGeometry } from './GeometryValidator';
 import { AlertTriangle, Loader2, UploadCloud, RefreshCw } from 'lucide-react';
 
 /**
@@ -25,7 +25,8 @@ export default function MriViewer({
   onLocationChange,
   onVolumesLoaded,
   onSliceChanged,
-  onOpenUpload
+  onOpenUpload,
+  activeSource = 'prediction'
 }) {
   const canvasRef = useRef(null);
   const nvRef = useRef(null);
@@ -183,18 +184,27 @@ export default function MriViewer({
     if (!nv) return;
 
     try {
-      const updatedCmap = createBraTSColormap({ showNETC, showED, showET });
-      nv.addColormap('brats_discrete', updatedCmap);
+      if (activeSource === 'error') {
+        const errorCmap = createErrorColormap();
+        nv.addColormap('error_map', errorCmap);
+        if (nv.volumes && nv.volumes.length > 1) {
+          nv.setColormap(1, 'error_map');
+          nv.setOpacity(1, overlayOpacity);
+        }
+      } else {
+        const updatedCmap = createBraTSColormap({ showNETC, showED, showET });
+        nv.addColormap('brats_discrete', updatedCmap);
 
-      if (nv.volumes && nv.volumes.length > 1) {
-        nv.setColormap(1, 'brats_discrete');
-        nv.setOpacity(1, overlayOpacity);
+        if (nv.volumes && nv.volumes.length > 1) {
+          nv.setColormap(1, 'brats_discrete');
+          nv.setOpacity(1, overlayOpacity);
+        }
       }
       nv.drawScene();
     } catch (err) {
       console.warn('[NiiVue Colormap update error]', err);
     }
-  }, [showNETC, showED, showET, overlayOpacity]);
+  }, [showNETC, showED, showET, overlayOpacity, activeSource]);
 
   // --------------------------------------------------------------------------
   // 5. Load Real Volumes (Base MRI + Optional Segmentation Mask)

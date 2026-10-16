@@ -65,9 +65,12 @@ export function validateOverlayGeometry(baseVol, maskVol) {
       baseDims[2] === maskDims[2];
 
     if (!dimsMatch) {
+      const msg = `Incompatible spatial dimensions: reference MRI is [${baseDims.join(', ')}] but segmentation mask is [${maskDims.join(', ')}].`;
       return {
         valid: false,
-        error: `Incompatible spatial dimensions: reference MRI is [${baseDims.join(', ')}] but segmentation mask is [${maskDims.join(', ')}].`,
+        compatible: false,
+        error: msg,
+        reason: msg,
         details: { baseDimensions: baseDims, maskDimensions: maskDims }
       };
     }
@@ -85,15 +88,18 @@ export function validateOverlayGeometry(baseVol, maskVol) {
       Math.abs(baseSpacing[2] - maskSpacing[2]) > tolerance;
 
     if (spacingMismatch) {
+      const msg = `Voxel spacing mismatch: reference spacing is [${baseSpacing.map(s => s.toFixed(2)).join(', ')}] mm but mask is [${maskSpacing.map(s => s.toFixed(2)).join(', ')}] mm.`;
       return {
         valid: false,
-        error: `Voxel spacing mismatch: reference spacing is [${baseSpacing.map(s => s.toFixed(2)).join(', ')}] mm but mask is [${maskSpacing.map(s => s.toFixed(2)).join(', ')}] mm.`,
+        compatible: false,
+        error: msg,
+        reason: msg,
         details: { baseSpacing, maskSpacing }
       };
     }
   }
 
-  return { valid: true };
+  return { valid: true, compatible: true };
 }
 
 /**
@@ -127,5 +133,38 @@ export function createBraTSColormap({
       showET ? 255 : 0
     ],
     I: [0, 1, 2, 3, 4]
+  };
+}
+
+/**
+ * Generates the Phase 6 Prediction-vs-Expert Error Colormap for NiiVue.
+ * Labels:
+ *   0: Background (Transparent)
+ *   1: True Positive (TP: Lime green #22C55E)
+ *   2: False Positive (FP: Rose red #EF4444)
+ *   3: False Negative (FN: Sky blue #38BDF8)
+ *
+ * @param {object} options
+ * @param {boolean} [options.showTP=true]
+ * @param {boolean} [options.showFP=true]
+ * @param {boolean} [options.showFN=true]
+ * @returns {object} NiiVue colormap structure { R, G, B, A, I }
+ */
+export function createErrorColormap({
+  showTP = true,
+  showFP = true,
+  showFN = true
+} = {}) {
+  return {
+    R: [0, 34, 239, 56],
+    G: [0, 197, 68, 189],
+    B: [0, 94, 68, 248],
+    A: [
+      0,
+      showTP ? 255 : 0,
+      showFP ? 255 : 0,
+      showFN ? 255 : 0
+    ],
+    I: [0, 1, 2, 3]
   };
 }

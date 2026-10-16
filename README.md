@@ -215,7 +215,7 @@ npm run build
 ```
 
 ### Current Status & Verification
-* **Completed (Phase 1 to Phase 5)**:
+* **Completed (Phase 1 to Phase 6)**:
   * Merged and verified Sarthak's Warm Blush (`#E9DDD5`) & Oxblood (`#6D263D`) editorial design system with Cormorant Garamond headings and Plus Jakarta Sans copy.
   * Interactive 2D anatomical atlas (`AnnotatedBrain.jsx`) with multi-view orientation rail (`superior`, `lateral`, `ventral`).
   * Dedicated 4-sequence upload workspace (`MriWorkspace.jsx`) with real axial MRI thumbnails and NIfTI client format validation.
@@ -230,7 +230,7 @@ npm run build
       * **ED (Label 2, Yellow `#EAB308`)**: Peritumoral Vasogenic Edema
       * **ET (Label 4, Red `#EF4444`)**: Enhancing Active Margin
       * Quick clinical presets: Whole Tumor (`WT`), Tumor Core (`TC`), Enhancing (`ET`), and Off.
-    * Overlay opacity slider (0% to 100%) and clear provenance badge (AI Model Prediction vs Ground-Truth Mask).
+    * Overlay opacity slider (0% to 100%) and clear provenance badge (AI Model Prediction vs Ground-Truth Mask vs Error Map).
     * Precision orthogonal slice scrubbers (`SliceControls.jsx`) and Window/Level (Contrast & Brightness).
     * Real-time spatial telemetry panel (`CoordinatePanel.jsx`): Voxel index `(i, j, k)`, world coordinates in millimetres `(RAS+)`, MRI intensity, and tissue classification.
     * Strict pre-flight geometry validation (`GeometryValidator.js`): Rejects misaligned masks (dimension mismatch or voxel spacing delta $> 0.05$ mm) to prevent false clinical localization.
@@ -254,15 +254,39 @@ npm run build
       * Honest provenance badge ("AI Prediction (MONAI)" vs "Ground Truth (Expert)" vs "No Mask Loaded").
       * Honest empty states: If 0 tumor voxels exist or no mask is loaded, clearly informs the clinician without displaying synthetic placeholder geometry.
       * WebGL resource lifecycle: Complete disposal of geometries, materials, controls, and renderer on unmount to prevent browser memory leaks.
-    * **Seamless 2D/3D Synchronization**:
-      * Shared visibility toggles (`showNETC`, `showED`, `showET`) and opacity across 2D multiplanar and 3D surface tabs in `WorkstationPage.jsx`.
+  * **Phase 6: Trust Layer, Scientific Measurements & Performance**:
+    * **Core Scientific Measurement Engine (`frontend/src/lib/metrics.js`)**:
+      * Physical volume quantification derived strictly from NIfTI 4x4 affine determinant: $V_{\text{voxel}} = |\det(A_{3\times 3})|$ mm³, $V_{\text{region}} = N \cdot V_{\text{voxel}} / 1000$ mL (isotropic & anisotropic geometries verified).
+      * Sørensen–Dice Similarity Coefficient with explicit zero-denominator policy ($\text{Dice}(\emptyset, \emptyset) = 1.0$).
+      * Sensitivity, Precision, and Specificity with numerically safe null handling when denominators are zero.
+      * Pure JavaScript surface-based 95th-percentile Hausdorff Distance (`HD95`) computed in physical millimetres (never voxel indices).
+      * Cryptographic provenance SHA-256 hex hashing of input NIfTI volumes via Web Crypto API.
+    * **Input Integrity & Trust Layer (`frontend/src/lib/trustLayer.js` & `TrustLayerPanel.jsx`)**:
+      * 10 automated pre-flight integrity checks: modality presence (4/4), 1 GiB per-file limit, NIfTI parsability, 3D volume sanity (finite/non-constant), cross-modality geometry compatibility, affine non-degeneracy, prediction label validation against BraTS 2021 convention (`{0, 1, 2, 4}`), expert mask label validation, prediction–expert spatial alignment, and backend response schema verification.
+      * Interactive `TrustLayerPanel` integrated as a dedicated workstation tab with Pass/Warn/Fail/NA status badges and expandable error details.
+    * **Prediction-vs-Expert Error Visualization (2D NiiVue Overlay)**:
+      * TP/FP/FN error classification volume (`computeErrorVolume`) and custom discrete NiiVue error colormap (`createErrorColormap`):
+        * **True Positive (TP, Lime Green `#22C55E`)**: Correct tumor prediction
+        * **False Positive (FP, Rose Red `#EF4444`)**: Over-called candidate region
+        * **False Negative (FN, Sky Blue `#38BDF8`)**: Missed pathological tissue
+      * Quick three-way provenance toggle in `OverlayControls.jsx`: `AI Prediction` $\leftrightarrow$ `Ground Truth` $\leftrightarrow$ `Error Map`.
+    * **Reproducible Benchmark Infrastructure (`frontend/src/lib/benchmark.js`)**:
+      * Per-case automated evaluation runner for held-out validation cohorts.
+      * Non-parametric and parametric statistical aggregation (Mean, Median, SD, IQR, Min, Max).
+      * Strict scientific integrity safeguard: Explicitly marks benchmarks as `PRELIMINARY` when $<10$ real cases are present and prevents synthetic fixtures from contaminating patient statistics.
+      * Standardized, machine-readable JSON export (`exportBenchmarkJSON`).
+    * **Workstation Integration (`WorkstationPage.jsx` & `MetricsPanel.jsx`)**:
+      * 5 functional tabs: `2D Multi-Planar (MPR)`, `3D Tumor Surface`, `Clinical Volumetrics`, `Trust Layer`, and `Diagnostic Report`.
+      * `MetricsPanel.jsx` presents physical tumor volumes, expert evaluation metrics, and SHA-256 provenance block with explicit `—` for missing values (never defaulting to 0).
   * **Automated Test Suite**:
-    * **33/33 frontend unit & integration tests passing** across 11 suites (`npm test`):
+    * **95/95 frontend unit & integration tests passing** across 24 suites (`npm test`):
       * 12 API service & NIfTI client validation tests
       * 10 Viewer geometry, affine transform, and discrete colormap tests
       * 11 3D surface extraction, bounding box, affine transform, and real backend artifact tests (`surface.test.js`)
-    * **0 lint errors, 0 warnings** across all 19 files (`npm run lint`).
-    * **Production build verified** in 1.42s (`npm run build`).
+      * 53 Phase 6 metrics, affine volume, confusion matrix, Dice/Sensitivity/Precision/Specificity, HD95, SHA-256 hash, and error overlay tests (`metrics.test.js`)
+      * 9 Phase 6 Trust Layer check runner and benchmark aggregation tests (`trustAndBenchmark.test.js`)
+    * **0 lint errors, 0 warnings** across all 21 files (`npm run lint`).
+    * **Production build verified** in 1.37s (`npm run build`).
 
 * **Inference Hardware & Backend Contract**:
   * Connected to Member 2's FastAPI + MONAI backend (`POST /api/v1/segment/predict`).

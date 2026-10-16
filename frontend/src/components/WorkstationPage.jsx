@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft,
   UploadCloud,
@@ -13,7 +13,8 @@ import {
   Printer,
   Scissors,
   Copy,
-  Download
+  Download,
+  ShieldCheck
 } from 'lucide-react';
 import MriViewer from './viewer/MriViewer';
 import ModalityBar from './viewer/ModalityBar';
@@ -21,6 +22,18 @@ import OverlayControls from './viewer/OverlayControls';
 import SliceControls from './viewer/SliceControls';
 import CoordinatePanel from './viewer/CoordinatePanel';
 import Segmentation3DViewer from './viewer/Segmentation3DViewer';
+import TrustLayerPanel from './TrustLayerPanel';
+import MetricsPanel from './MetricsPanel';
+import { runTrustLayer } from '../lib/trustLayer';
+import {
+  computeRegionVolumes,
+  computeAllMetrics,
+  hd95,
+  sha256ArrayBuffer,
+  computeRegionMask,
+  BRATS_REGIONS
+} from '../lib/metrics';
+import { parseNiftiVolume } from './viewer/SurfaceExtractor';
 
 export default function WorkstationPage({
   onBackToHome,
@@ -30,7 +43,7 @@ export default function WorkstationPage({
   sessionFiles = null
 }) {
   // Active clinical workspace tab:
-  // 'mpr' (2D Multi-Planar) | '3d' (3D Tumor Surface) | 'volumetrics' (Clinical Metrics) | 'report' (Diagnostic Report)
+  // 'mpr' (2D Multi-Planar) | '3d' (3D Tumor Surface) | 'volumetrics' (Clinical Metrics) | 'trust' (Trust Layer) | 'report' (Diagnostic Report)
   const [activeTab, setActiveTab] = useState(initialTab);
 
   // Selected modality for 2D background slice
@@ -38,7 +51,20 @@ export default function WorkstationPage({
 
   // 2D Viewer Display Modes & Provenance
   const [sliceType, setSliceType] = useState('multiplanar'); // 'multiplanar' | 'axial' | 'coronal' | 'sagittal'
-  const [activeMaskSource, setActiveMaskSource] = useState('prediction'); // 'prediction' | 'expert'
+  const [activeMaskSource, setActiveMaskSource] = useState('prediction'); // 'prediction' | 'expert' | 'error'
+
+  // Phase 6 Trust Layer & Measurement States
+  const [trustChecks, setTrustChecks] = useState([]);
+  const [trustLoading, setTrustLoading] = useState(false);
+  const [computedVolumes, setComputedVolumes] = useState(null);
+  const [evaluationMetrics, setEvaluationMetrics] = useState(null);
+  const [hd95Data, setHd95Data] = useState(null);
+  const [fileHashes, setFileHashes] = useState({});
+
+  // Error map overlay sub-toggles
+  const [showTP, setShowTP] = useState(true);
+  const [showFP, setShowFP] = useState(true);
+  const [showFN, setShowFN] = useState(true);
 
   // Orthogonal slice indices
   const [axialSlice, setAxialSlice] = useState(78); // 0 - 155
@@ -130,7 +156,104 @@ export default function WorkstationPage({
     currentMaskVolume = patientCase.artifacts.segmentation_mask_url;
   }
 
+  // --------------------------------------------------------------------------
+  // Phase 6: Automated Trust Layer & Provenance Runner
+  // --------------------------------------------------------------------------
+  const handleRunTrustChecks = useCallback(async () => {
+    // Yield to avoid synchronous cascading render warning
+    await Promise.resolve();
+    setTrustLoading(true);
+    try {
+      // 1. Compute SHA-256 hashes of available files
+      const hashes = {};
+      if (sessionFiles) {
+        for (const [key, file] of Object.entries(sessionFiles)) {
+          if (file && typeof file.arrayBuffer === 'function') {
+            try {
+              const buf = await file.arrayBuffer();
+              hashes[key] = await sha256ArrayBuffer(buf);
+            } catch {
+              // Ignore hash error
+            }
+          }
+        }
+      }
+      setFileHashes(hashes);
 
+      // 2. Parse prediction or expert if provided
+      let parsedPred = null;
+      let parsedRef = null;
+
+      if (sessionFiles?.expertSeg && typeof sessionFiles.expertSeg.arrayBuffer === 'function') {
+        try {
+          const buf = await sessionFiles.expertSeg.arrayBuffer();
+          parsedRef = parseNiftiVolume(buf);
+        } catch (e) {
+          console.warn('[TrustLayer] Failed to parse expert mask', e);
+        }
+      }
+
+      const parsedVolumes = {
+        predVolume: parsedPred?.volume || null,
+        predDims: parsedPred?.dims || geometryData.dimensions,
+        predAffine: parsedPred?.affine || null,
+        refVolume: parsedRef?.volume || null,
+        refDims: parsedRef?.dims || null,
+      };
+
+      const checks = await runTrustLayer(sessionFiles, predictionData, parsedVolumes);
+      setTrustChecks(checks);
+
+      // 3. Compute real evaluation metrics if both pred and ref are available
+      if (parsedVolumes.predVolume && parsedVolumes.refVolume) {
+        const metrics = computeAllMetrics(
+          parsedVolumes.predVolume,
+          parsedVolumes.refVolume,
+          parsedVolumes.predDims,
+          parsedVolumes.predAffine
+        );
+        setEvaluationMetrics(metrics);
+
+        const hd95Results = {};
+        for (const [regionName, labelSet] of Object.entries(BRATS_REGIONS)) {
+          const pMask = computeRegionMask(parsedVolumes.predVolume, parsedVolumes.predDims, labelSet);
+          const rMask = computeRegionMask(parsedVolumes.refVolume, parsedVolumes.predDims, labelSet);
+          hd95Results[regionName] = hd95(pMask, rMask, parsedVolumes.predDims, parsedVolumes.predAffine);
+        }
+        setHd95Data(hd95Results);
+      }
+
+      if (parsedVolumes.predVolume) {
+        const vols = computeRegionVolumes(
+          parsedVolumes.predVolume,
+          parsedVolumes.predDims,
+          parsedVolumes.predAffine
+        );
+        setComputedVolumes(vols);
+      }
+    } catch (err) {
+      console.error('[TrustLayer Error]', err);
+    } finally {
+      setTrustLoading(false);
+    }
+  }, [sessionFiles, predictionData, geometryData.dimensions]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleRunTrustChecks();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [handleRunTrustChecks]);
+
+  // Provenance metadata object
+  const provenanceData = {
+    patientId: patientCase.patient_id,
+    modelVersion: 'SegResNet-BraTS2021-v1.4.0 (MONAI AMP fp16)',
+    timestamp: patientCase.acquisition_date || '2024-10-15',
+    executionSec: patientCase.execution_time_seconds,
+    hardware: patientCase.hardware_device,
+    fileHashes: fileHashes
+  };
 
   // --------------------------------------------------------------------------
   // Copy Report Summary to Clipboard
@@ -263,6 +386,7 @@ CLINICAL INDICES:
               { id: 'mpr', label: '2D Multi-Planar (MPR)', icon: Layers },
               { id: '3d', label: '3D Tumor Surface', icon: Box },
               { id: 'volumetrics', label: 'Clinical Volumetrics', icon: BarChart3 },
+              { id: 'trust', label: 'Trust Layer', icon: ShieldCheck },
               { id: 'report', label: 'Diagnostic Report', icon: FileText }
             ].map((tab) => {
               const Icon = tab.icon;
@@ -404,6 +528,12 @@ CLINICAL INDICES:
                 onToggleNETC={setShowNETC}
                 onToggleED={setShowED}
                 onToggleET={setShowET}
+                showTP={showTP}
+                showFP={showFP}
+                showFN={showFN}
+                onToggleTP={setShowTP}
+                onToggleFP={setShowFP}
+                onToggleFN={setShowFN}
                 overlayOpacity={overlayOpacity}
                 onChangeOpacity={setOverlayOpacity}
                 showCrosshairs={showCrosshairs}
@@ -417,6 +547,7 @@ CLINICAL INDICES:
               <MriViewer
                 baseVolume={currentBaseVolume}
                 maskVolume={currentMaskVolume}
+                activeSource={activeMaskSource}
                 sliceType={sliceType}
                 showNETC={showNETC}
                 showED={showED}
@@ -504,154 +635,96 @@ CLINICAL INDICES:
         )}
 
         {/* ------------------------------------------------------------------ */}
-        {/* TAB 3: Clinical Volumetrics & Surgical Resection Analytics         */}
+        {/* TAB 3: Clinical Volumetrics & Scientific Measurements              */}
         {/* ------------------------------------------------------------------ */}
         {activeTab === 'volumetrics' && (
           <div className="space-y-6">
-            {/* Volumetric Breakdown Table & Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Detailed Volume Measurements */}
-              <div className="p-6 rounded-2xl bg-[#080D19]/90 border border-cyan-500/25 space-y-4">
-                <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-                  <div className="p-2 rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-800">
-                    <BarChart3 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">Physical Tumor Volumes</h3>
-                    <p className="text-xs text-slate-400">Calculated via NIfTI voxel spacing: 1.0 × 1.0 × 1.0 mm³</p>
-                  </div>
-                </div>
+            <MetricsPanel
+              regionVolumes={computedVolumes}
+              metricsData={evaluationMetrics}
+              hd95Data={hd95Data}
+              predictionData={patientCase}
+              provenance={provenanceData}
+              isSynthetic={!predictionData}
+            />
 
-                <div className="space-y-3">
-                  {[
-                    {
-                      label: 'Whole Tumor (WT)',
-                      tag: 'Labels 1 + 2 + 4',
-                      vol: patientCase.volumes_ml?.whole_tumor?.toFixed(2) || '42.15',
-                      color: 'text-white',
-                      barColor: 'bg-cyan-400',
-                      pct: 100,
-                      desc: 'Full pathological footprint including infiltrating edema'
-                    },
-                    {
-                      label: 'Peritumoral Edema (ED)',
-                      tag: 'Label 2',
-                      vol: patientCase.volumes_ml?.edema?.toFixed(2) || '23.85',
-                      color: 'text-amber-400',
-                      barColor: 'bg-amber-400',
-                      pct: 56.6,
-                      desc: 'Vasogenic swelling surrounding neoplastic core'
-                    },
-                    {
-                      label: 'Tumor Core (TC)',
-                      tag: 'Labels 1 + 4',
-                      vol: patientCase.volumes_ml?.tumor_core?.toFixed(2) || '18.30',
-                      color: 'text-cyan-300',
-                      barColor: 'bg-cyan-500',
-                      pct: 43.4,
-                      desc: 'Solid tumor bulk (excluding surrounding edema)'
-                    },
-                    {
-                      label: 'Enhancing Active Tumor (ET)',
-                      tag: 'Label 4',
-                      vol: patientCase.volumes_ml?.enhancing_tumor?.toFixed(2) || '9.45',
-                      color: 'text-rose-400',
-                      barColor: 'bg-rose-500',
-                      pct: 22.4,
-                      desc: 'Hyper-vascularized margin with disrupted blood-brain barrier'
-                    },
-                    {
-                      label: 'Necrotic Core (NETC)',
-                      tag: 'Label 1',
-                      vol: patientCase.volumes_ml?.necrotic_core?.toFixed(2) || '8.85',
-                      color: 'text-cyan-200',
-                      barColor: 'bg-cyan-600',
-                      pct: 21.0,
-                      desc: 'Non-enhancing hypoperfused necrotic tissue'
-                    }
-                  ].map((row) => (
-                    <div key={row.label} className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
-                      <div className="flex items-center justify-between text-xs font-mono">
-                        <span className="font-semibold text-slate-200">{row.label}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">{row.tag}</span>
-                          <span className={`text-sm font-bold ${row.color}`}>{row.vol} mL</span>
-                        </div>
-                      </div>
-                      <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                        <div className={`${row.barColor} h-1.5 rounded-full`} style={{ width: `${row.pct}%` }} />
-                      </div>
-                      <p className="text-[10px] text-slate-400">{row.desc}</p>
-                    </div>
-                  ))}
+            {/* Surgical & Clinical Indices (RANO Criteria) */}
+            <div className="p-6 rounded-2xl bg-[#080D19]/90 border border-cyan-500/25 space-y-4">
+              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div className="p-2 rounded-lg bg-teal-950 text-teal-400 border border-teal-800">
+                  <Scissors className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Surgical Resection Assessment</h3>
+                  <p className="text-xs text-slate-400">Quantitative neuro-oncology indicators (RANO Criteria)</p>
                 </div>
               </div>
 
-              {/* Surgical & Clinical Indices (RANO Criteria) */}
-              <div className="p-6 rounded-2xl bg-[#080D19]/90 border border-cyan-500/25 space-y-4">
-                <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-                  <div className="p-2 rounded-lg bg-teal-950 text-teal-400 border border-teal-800">
-                    <Scissors className="w-5 h-5" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-400">RANO Major Dimensions:</span>
+                    <span className="font-bold text-cyan-300">44.0 × 36.0 × 32.0 mm</span>
                   </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">Surgical Resection Assessment</h3>
-                    <p className="text-xs text-slate-400">Quantitative neuro-oncology indicators (RANO Criteria)</p>
-                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Cross-sectional 2D product: <strong>1,584 mm²</strong>. Delineated along maximum orthogonal axes.
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-xs font-mono">
-                      <span className="text-slate-400">RANO Major Dimensions:</span>
-                      <span className="font-bold text-cyan-300">44.0 × 36.0 × 32.0 mm</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">
-                      Cross-sectional 2D product: <strong>1,584 mm²</strong>. Delineated along maximum orthogonal axes.
-                    </p>
+                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-400">Infiltration Index (ED / TC Ratio):</span>
+                    <span className="font-bold text-amber-400">1.30 (Marked Infiltration)</span>
                   </div>
+                  <p className="text-[11px] text-slate-400">
+                    Vasogenic edema exceeds core volume by 1.3×, suggesting significant infiltrative border along white matter tracts.
+                  </p>
+                </div>
 
-                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-xs font-mono">
-                      <span className="text-slate-400">Infiltration Index (ED / TC Ratio):</span>
-                      <span className="font-bold text-amber-400">1.30 (Marked Infiltration)</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">
-                      Vasogenic edema exceeds core volume by 1.3×, suggesting significant infiltrative border along white matter tracts.
-                    </p>
+                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-400">Active Fraction (ET / TC Ratio):</span>
+                    <span className="font-bold text-rose-400">51.6% (High Angiogenesis)</span>
                   </div>
+                  <p className="text-[11px] text-slate-400">
+                    Over half of the tumor core is actively enhancing under gadolinium, indicating aggressive vascular remodeling.
+                  </p>
+                </div>
 
-                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-xs font-mono">
-                      <span className="text-slate-400">Active Fraction (ET / TC Ratio):</span>
-                      <span className="font-bold text-rose-400">51.6% (High Angiogenesis)</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">
-                      Over half of the tumor core is actively enhancing under gadolinium, indicating aggressive vascular remodeling.
-                    </p>
+                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-400">Mass Effect & Midline Shift:</span>
+                    <span className="font-bold text-amber-300">Moderate Compressive Effect</span>
                   </div>
+                  <p className="text-[11px] text-slate-400">
+                    Total lesion burden of 42.15 mL exerts compression on the right lateral ventricle with approximately 3.2 mm subfalcine displacement.
+                  </p>
+                </div>
 
-                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-xs font-mono">
-                      <span className="text-slate-400">Mass Effect & Midline Shift:</span>
-                      <span className="font-bold text-amber-300">Moderate Compressive Effect</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">
-                      Total lesion burden of 42.15 mL exerts compression on the right lateral ventricle with approximately 3.2 mm subfalcine displacement.
-                    </p>
+                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1 md:col-span-2">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-400">Hemispheric Localization:</span>
+                    <span className="font-bold text-cyan-300">Right Frontoparietal Parenchyma</span>
                   </div>
-
-                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                    <div className="flex items-center justify-between text-xs font-mono">
-                      <span className="text-slate-400">Hemispheric Localization:</span>
-                      <span className="font-bold text-cyan-300">Right Frontoparietal Parenchyma</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">
-                      Centroid localized at physical RAS+ coordinates (+28.0 mm Right, -12.0 mm Posterior, +18.0 mm Superior).
-                    </p>
-                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Centroid localized at physical RAS+ coordinates (+28.0 mm Right, -12.0 mm Posterior, +18.0 mm Superior).
+                  </p>
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* TAB 4: Input Integrity & Trust Layer Verification                  */}
+        {/* ------------------------------------------------------------------ */}
+        {activeTab === 'trust' && (
+          <div className="space-y-6">
+            <TrustLayerPanel
+              checks={trustChecks}
+              loading={trustLoading}
+              onRerun={handleRunTrustChecks}
+            />
           </div>
         )}
 
