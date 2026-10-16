@@ -1,143 +1,198 @@
-import React, { useRef } from 'react';
-import { ArrowRight, ShieldCheck, Layers, UploadCloud } from 'lucide-react';
-import Brain3D from './Brain3D';
-import UploadPanel from './UploadPanel';
+import React, { useState, useEffect } from 'react';
+import { ArrowRight, ShieldCheck, UploadCloud } from 'lucide-react';
+import AnnotatedBrain from './AnnotatedBrain';
+import thumbSuperior from '../assets/atlas/view_thumb_superior.png';
+import thumbLateral from '../assets/atlas/view_thumb_lateral.png';
+import thumbVentral from '../assets/atlas/view_thumb_ventral.png';
 
-export default function Hero() {
-  const uploadPanelRef = useRef(null);
+const VIEW_OPTIONS = [
+  {
+    id: 'superior',
+    label: 'Superior',
+    sub: 'Axial / Top',
+    thumb: thumbSuperior
+  },
+  {
+    id: 'lateral',
+    label: 'Lateral',
+    sub: 'Sagittal / Side',
+    thumb: thumbLateral
+  },
+  {
+    id: 'ventral',
+    label: 'Ventral',
+    sub: 'Basal / Inferior',
+    thumb: thumbVentral
+  }
+];
 
-  const handleScrollToUpload = () => {
-    if (uploadPanelRef.current) {
-      uploadPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Add subtle glow flash on focus
-      uploadPanelRef.current.classList.add('ring-2', 'ring-cyan-400');
-      setTimeout(() => {
-        uploadPanelRef.current?.classList.remove('ring-2', 'ring-cyan-400');
-      }, 1200);
-    }
+export default function Hero({ onExploreClick, onLaunchWorkstation }) {
+  const [activeView, setActiveView] = useState('lateral');
+  const [isAutoCycling, setIsAutoCycling] = useState(true);
+
+  // Auto-cycle between views every 9 seconds if not paused
+  useEffect(() => {
+    if (!isAutoCycling) return;
+
+    const interval = setInterval(() => {
+      setActiveView((prev) => {
+        if (prev === 'lateral') return 'superior';
+        if (prev === 'superior') return 'ventral';
+        return 'lateral';
+      });
+    }, 9000);
+
+    return () => clearInterval(interval);
+  }, [isAutoCycling]);
+
+  const handleManualSelect = (viewId) => {
+    setActiveView(viewId);
+    // Pause auto-cycle briefly on manual click so user can study the view
+    setIsAutoCycling(false);
+    setTimeout(() => setIsAutoCycling(true), 15000);
   };
 
   return (
-    <section className="relative min-h-[calc(100vh-5rem)] flex flex-col justify-center overflow-hidden px-6 py-6 lg:py-10">
-      {/* Background Ambience: Subtle atmospheric depth and sparse radial lights */}
-      <div className="absolute top-1/4 right-1/4 w-[650px] h-[650px] bg-cyan-500/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-10 left-10 w-[450px] h-[450px] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
-
-      <div className="relative z-10 max-w-7xl mx-auto w-full">
-        {/* Main 2-Column Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
+    <section className="relative w-full bg-[#E9DDD5] px-6 lg:px-10 pt-6 pb-16 lg:pb-22">
+      <div className="max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-3 items-center">
           
-          {/* Left Column: Hero Content & Typography */}
-          <div className="lg:col-span-6 space-y-6 text-left">
-            {/* Top Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 border border-cyan-500/30 text-cyan-300 text-xs font-mono tracking-wide shadow-[0_0_15px_-3px_rgba(34,211,238,0.2)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-              <span>KURUKSHETRA HACKATHON · 3D BRAIN MRI SEGMENTATION</span>
-            </div>
+          {/* Left Column: Editorial Headline & Actions */}
+          <div className="lg:col-span-4 xl:col-span-4 space-y-6 text-left z-10">
+            {/* Eyebrow */}
+            <p className="text-xs font-semibold tracking-widest uppercase text-[#6E5D65]">
+              Brain MRI · Anatomical Research
+            </p>
 
-            {/* Monumental Headline */}
+            {/* Editorial Headline */}
             <div className="space-y-1">
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white font-sans leading-[1.08]">
+              <h1 className="text-5xl sm:text-6xl lg:text-7xl font-normal tracking-tight text-[#30252A] font-serif leading-[1.02]">
                 Look deeper. <br />
-                <span className="bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent">
-                  See beyond.
-                </span>
+                <span className="italic font-serif">See beyond.</span>
               </h1>
             </div>
 
-            {/* Exact Supporting Copy */}
-            <p className="text-base sm:text-lg text-slate-300 font-normal leading-relaxed max-w-xl">
-              Explore brain MRI through AI-powered tumor-region segmentation and immersive 3D visualization.
+            {/* Description */}
+            <p className="text-sm sm:text-base text-[#56474E] font-normal leading-relaxed max-w-sm">
+              Explore brain MRI through AI-powered tumor-region segmentation and immersive visualization.
             </p>
 
-            {/* Modality Chips */}
+            {/* 4 Modality Labels */}
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              {['T1 Native', 'T1Gd Contrast', 'T2-Weighted', 'FLAIR Edema'].map((seq) => (
+              {['T1', 'T1Gd', 'T2', 'FLAIR'].map((mod) => (
                 <span
-                  key={seq}
-                  className="px-3 py-1 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-300 text-xs font-mono"
+                  key={mod}
+                  className="px-3.5 py-1 rounded-full bg-[#F3ECE7] border border-[#DDD0C8] text-xs font-medium text-[#30252A] shadow-xs"
                 >
-                  {seq}
+                  {mod}
                 </span>
               ))}
             </div>
 
-            {/* Primary CTA Button */}
-            <div className="pt-2 space-y-3">
-              <div>
+            {/* Primary CTA Button & Privacy Statement */}
+            <div className="pt-2 space-y-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <button
-                  onClick={handleScrollToUpload}
-                  className="group relative inline-flex items-center justify-center gap-3 px-8 py-3.5 rounded-xl font-semibold text-sm tracking-wide text-slate-950 bg-gradient-to-r from-cyan-400 via-cyan-300 to-teal-300 hover:from-cyan-300 hover:to-teal-200 transition-all duration-300 shadow-[0_0_28px_-4px_rgba(34,211,238,0.55)] hover:shadow-[0_0_36px_-2px_rgba(34,211,238,0.75)] hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                  onClick={onExploreClick}
+                  className="group inline-flex items-center justify-center gap-3 px-7 py-3.5 rounded-full font-medium text-sm text-[#F8F5F0] bg-[#6D263D] hover:bg-[#581D30] transition-all duration-300 shadow-[0_6px_20px_rgba(109,38,61,0.25)] hover:shadow-[0_8px_25px_rgba(109,38,61,0.35)] hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
                 >
-                  <UploadCloud className="w-4 h-4 stroke-[2.2]" />
-                  <span>Upload MRI Scan</span>
+                  <UploadCloud className="w-4 h-4 stroke-[2]" />
+                  <span>Explore with MRI scans</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
+
+                {onLaunchWorkstation && (
+                  <button
+                    onClick={onLaunchWorkstation}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-full text-xs font-semibold text-[#6D263D] bg-transparent border border-[#6D263D]/40 hover:bg-[#6D263D]/10 transition-colors cursor-pointer"
+                  >
+                    <span>Open 3D Workstation</span>
+                    <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-[#6D263D]/10">3D</span>
+                  </button>
+                )}
               </div>
 
               {/* Privacy-Conscious Statement */}
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <ShieldCheck className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                <span>Local-only processing. MRI files stay on your device.</span>
+              <div className="flex items-center gap-2 text-xs text-[#6E5D65] max-w-sm pt-1">
+                <ShieldCheck className="w-4 h-4 text-[#6D263D] flex-shrink-0" />
+                <span>Privacy-conscious processing. MRI files are handled according to the active workflow.</span>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Framed 3D Brain View Panel */}
-          <div className="lg:col-span-6 relative">
-            {/* The Framed Brain Canvas Box */}
-            <div className="relative w-full aspect-[4/3] sm:aspect-square lg:aspect-[1.12/1] rounded-2xl border border-cyan-500/30 bg-[#060A12]/70 backdrop-blur-md overflow-hidden shadow-[0_0_60px_-15px_rgba(6,182,212,0.22)] flex flex-col justify-between">
+          {/* Center Column: Dominant Interactive Multi-View Brain */}
+          <div className="lg:col-span-7 xl:col-span-7 flex items-center justify-center">
+            <AnnotatedBrain
+              activeView={activeView}
+              onViewChange={(v) => setActiveView(v)}
+            />
+          </div>
+
+          {/* Far Right Rail: Interactive 3-View Switcher Rail */}
+          <div className="hidden lg:flex lg:col-span-1 justify-end">
+            <div className="w-24 flex flex-col items-center py-4 px-2 rounded-2xl bg-[#E2D5CC]/50 border border-[#D5C2B8] shadow-xs space-y-4">
               
-              {/* Top Frame Bar */}
-              <div className="relative z-20 flex items-center justify-between px-5 pt-4 text-xs font-mono">
-                <div className="flex items-center gap-2 text-cyan-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                  <span className="tracking-wider uppercase font-medium">3D Brain View</span>
-                </div>
-                <div className="text-slate-400 tracking-wider">
-                  1.0mm <span className="text-slate-600">|</span> ISOTROPIC
-                </div>
+              {/* Rail Header */}
+              <div className="text-center">
+                <span className="text-[10px] font-mono tracking-widest uppercase text-[#6E5D65] block font-semibold">
+                  HUMAN
+                </span>
+                <span className="text-[10px] font-mono tracking-widest uppercase text-[#30252A] block font-bold">
+                  BRAIN
+                </span>
+                <div className="w-8 h-px bg-[#D5C2B8] mx-auto mt-1" />
               </div>
 
-              {/* Center Canvas: Interactive 3D Anatomical Brain */}
-              <div className="relative flex-1 w-full h-full min-h-[340px]">
-                <Brain3D />
+              {/* 3 Interactive Thumbnail Buttons */}
+              <div className="space-y-3 w-full">
+                {VIEW_OPTIONS.map((opt) => {
+                  const isActive = activeView === opt.id;
 
-                {/* Right Edge: Subtle Measurement Scale Ticks */}
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1.5 opacity-40 pointer-events-none">
-                  {[...Array(12)].map((_, i) => (
-                    <div
-                      key={i}
-                      className={`h-px bg-cyan-400 ${i % 3 === 0 ? 'w-3' : 'w-1.5'}`}
-                    />
-                  ))}
-                </div>
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => handleManualSelect(opt.id)}
+                      className={`group w-full flex flex-col items-center p-1.5 rounded-xl transition-all duration-300 cursor-pointer ${
+                        isActive
+                          ? 'bg-[#F8F5F0] border-2 border-[#6D263D] shadow-sm scale-105'
+                          : 'bg-[#F8F5F0]/60 border border-[#DDD0C8] hover:bg-[#F8F5F0] hover:border-[#6D263D]/50 hover:scale-102'
+                      }`}
+                      title={`Switch to ${opt.label} View`}
+                    >
+                      <div className="relative w-12 h-12 flex items-center justify-center rounded-lg overflow-hidden bg-[#E9DDD5]">
+                        <img
+                          src={opt.thumb}
+                          alt={opt.label}
+                          className="w-full h-full object-contain filter contrast-[1.03]"
+                        />
+                        {isActive && (
+                          <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#6D263D] shadow-xs" />
+                        )}
+                      </div>
+                      <span className={`text-[10px] font-sans font-bold mt-1.5 leading-tight ${
+                        isActive ? 'text-[#6D263D]' : 'text-[#30252A]'
+                      }`}>
+                        {opt.label}
+                      </span>
+                      <span className="text-[8px] font-mono text-[#6E5D65] leading-none">
+                        {opt.sub}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Bottom Frame Bar */}
-              <div className="relative z-20 flex items-center justify-between px-5 pb-4 text-xs font-mono">
-                <div className="flex items-center gap-2 text-slate-400">
-                  <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                  <span className="text-[11px] uppercase tracking-wide">
-                    4 MRI Sequences <span className="text-slate-500">(T1, T1Gd, T2, FLAIR)</span>
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
-                  <span className="w-1 h-1 rounded-full bg-cyan-400" />
-                  <span className="tracking-wider uppercase">Research Preview</span>
-                </div>
+              {/* Rail Footer */}
+              <div className="text-center pt-1 border-t border-[#D5C2B8] w-full">
+                <span className="text-[9px] font-mono tracking-wider uppercase text-[#6E5D65] block leading-tight">
+                  ANATOMICAL<br />VIEWS
+                </span>
               </div>
 
             </div>
           </div>
 
         </div>
-
-        {/* MRI Upload Panel: Positioned beneath left content with layered overlap aesthetic */}
-        <div className="mt-8 lg:mt-10 lg:-mr-12 max-w-2xl">
-          <UploadPanel panelRef={uploadPanelRef} />
-        </div>
-
       </div>
     </section>
   );

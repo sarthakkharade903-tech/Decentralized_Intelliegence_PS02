@@ -159,6 +159,7 @@ async def predict_segmentation(
     t2: UploadFile = File(..., description="T2-Weighted MRI scan (.nii or .nii.gz)"),
     flair: UploadFile = File(..., description="FLAIR MRI scan (.nii or .nii.gz)"),
     patient_id: str = Form("ANONYMOUS", description="Optional patient or case identifier"),
+    expert_seg: Optional[UploadFile] = File(None, description="Optional ground-truth mask for evaluation"),
 ) -> Dict[str, Any]:
     """End-to-end multi-parametric MRI segmentation endpoint.
 
