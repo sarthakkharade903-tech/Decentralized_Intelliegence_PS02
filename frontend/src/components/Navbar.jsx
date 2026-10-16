@@ -3,7 +3,8 @@ import React from 'react';
 export default function Navbar({
   currentPage = 'landing',
   onNavigate = () => {},
-  onOpenUpload = () => {}
+  onOpenUpload = () => {},
+  hasResults = false
 }) {
   return (
     <header className="relative z-30 w-full bg-[#E9DDD5] px-6 lg:px-12 pt-6 pb-4 border-b border-[#DDD0C8]/60">
@@ -64,6 +65,19 @@ export default function Navbar({
                 3D
               </span>
             </button>
+            {hasResults && (
+              <button
+                onClick={() => onNavigate('results')}
+                className={`text-xs font-semibold tracking-wider uppercase flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  currentPage === 'results'
+                    ? 'text-[#30252A] border-b-2 border-[#6D263D] pb-0.5'
+                    : 'text-[#6E5D65] hover:text-[#30252A]'
+                }`}
+              >
+                Results
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+              </button>
+            )}
           </nav>
         </div>
 

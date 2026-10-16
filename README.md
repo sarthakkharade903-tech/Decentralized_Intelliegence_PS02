@@ -34,7 +34,7 @@ The interface is structured into two distinct, deliberate environments:
 
 | Component | Status | Details |
 | :--- | :--- | :--- |
-| **Top Navigation** | **Implemented & Verified** | Engraved brain icon, editorial wordmark, `Home` and `Workstation` tabs, quick upload trigger, and `Research Preview` badge. |
+| **Top Navigation** | **Implemented & Verified** | Engraved brain icon, editorial wordmark, `Home`, `Workstation`, and conditional `Results` tabs, quick upload trigger, and `Research Preview` badge. |
 | **Hero Copy & Editorial Typography** | **Implemented & Verified** | Cormorant Garamond serif headline, Plus Jakarta Sans body copy, and 4 modality chips. |
 | **Annotated 2D Brain Illustration** | **Implemented & Verified** | Classical anatomy atlas engraving on `#E9DDD5` with SVG leader lines, hover-responsive pins, and educational functional labels. |
 | **Anatomical Views Rail** | **Implemented & Verified** | Superior, lateral, and ventral reference thumbnails with auto-cycling and manual inspection. |

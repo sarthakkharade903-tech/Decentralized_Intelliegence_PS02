@@ -27,11 +27,12 @@ import {
 export default function WorkstationPage({
   onBackToHome,
   onOpenUpload,
-  predictionData = null
+  predictionData = null,
+  initialTab = 'mpr'
 }) {
   // Active clinical workspace tab:
   // 'mpr' (2D Multi-Planar) | '3d' (3D Tumor Surface) | 'volumetrics' (Clinical Metrics) | 'report' (Diagnostic Report)
-  const [activeTab, setActiveTab] = useState('mpr');
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   // Selected modality for 2D background slice
   const [activeModality, setActiveModality] = useState('t1gd'); // 't1' | 't1gd' | 't2' | 'flair'

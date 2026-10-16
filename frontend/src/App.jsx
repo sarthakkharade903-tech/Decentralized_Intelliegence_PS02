@@ -28,11 +28,11 @@ export default function App() {
     }
   };
 
-  // When inference succeeds in modal, load data into workstation and switch view
+  // When inference succeeds in modal, load data into workstation and switch to results view
   const handleInferenceSuccess = (result) => {
     setPredictionData(result);
     setIsUploadOpen(false);
-    setCurrentPage('workstation');
+    setCurrentPage('results');
   };
 
   return (
@@ -42,6 +42,7 @@ export default function App() {
         currentPage={currentPage}
         onNavigate={(page) => setCurrentPage(page)}
         onOpenUpload={() => setIsUploadOpen(true)}
+        hasResults={Boolean(predictionData)}
       />
 
       {/* Dynamic Multi-Page Router */}
@@ -67,6 +68,7 @@ export default function App() {
             onBackToHome={() => setCurrentPage('landing')}
             onOpenUpload={() => setIsUploadOpen(true)}
             predictionData={predictionData}
+            initialTab={currentPage === 'results' ? 'volumetrics' : 'mpr'}
           />
         </main>
       )}
