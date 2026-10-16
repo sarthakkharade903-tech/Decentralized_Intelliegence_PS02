@@ -1,21 +1,19 @@
 import React, { useRef } from 'react';
-import { ArrowRight, ShieldCheck, Layers, UploadCloud } from 'lucide-react';
+import {
+  ArrowRight,
+  ShieldCheck,
+  Layers,
+  UploadCloud,
+  Box,
+  Eye,
+  BarChart3,
+  AlertTriangle
+} from 'lucide-react';
 import Brain3D from './Brain3D';
 import UploadPanel from './UploadPanel';
 
-export default function Hero() {
+export default function Hero({ onOpenUpload, onLaunchWorkstation }) {
   const uploadPanelRef = useRef(null);
-
-  const handleScrollToUpload = () => {
-    if (uploadPanelRef.current) {
-      uploadPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Add subtle glow flash on focus
-      uploadPanelRef.current.classList.add('ring-2', 'ring-cyan-400');
-      setTimeout(() => {
-        uploadPanelRef.current?.classList.remove('ring-2', 'ring-cyan-400');
-      }, 1200);
-    }
-  };
 
   return (
     <section className="relative min-h-[calc(100vh-5rem)] flex flex-col justify-center overflow-hidden px-6 py-6 lg:py-10">
@@ -24,6 +22,17 @@ export default function Hero() {
       <div className="absolute bottom-10 left-10 w-[450px] h-[450px] bg-teal-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="relative z-10 max-w-7xl mx-auto w-full">
+        {/* Non-Diagnostic Disclaimer Banner */}
+        <div className="mb-6 p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3 text-xs text-slate-300">
+          <div className="flex items-center gap-2 text-cyan-300 font-mono text-[11px]">
+            <AlertTriangle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+            <span>RESEARCH & TEACHING PROTOTYPE ONLY · NOT A CERTIFIED CLINICAL DIAGNOSTIC DEVICE</span>
+          </div>
+          <span className="hidden sm:inline-block text-[10px] font-mono text-slate-400">
+            De-identified public BraTS research data only
+          </span>
+        </div>
+
         {/* Main 2-Column Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
           
@@ -47,7 +56,7 @@ export default function Hero() {
 
             {/* Exact Supporting Copy */}
             <p className="text-base sm:text-lg text-slate-300 font-normal leading-relaxed max-w-xl">
-              Explore brain MRI through AI-powered tumor-region segmentation and immersive 3D visualization.
+              NeuroVault transforms multi-parametric brain MRI scans into clinically exact 3D segmentations of Whole Tumor, Tumor Core, and Enhancing Margins—preserving physical affine geometry and standardized BraTS 2021 label hierarchy.
             </p>
 
             {/* Modality Chips */}
@@ -62,23 +71,64 @@ export default function Hero() {
               ))}
             </div>
 
-            {/* Primary CTA Button */}
+            {/* Primary & Secondary Actions */}
             <div className="pt-2 space-y-3">
-              <div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <button
-                  onClick={handleScrollToUpload}
-                  className="group relative inline-flex items-center justify-center gap-3 px-8 py-3.5 rounded-xl font-semibold text-sm tracking-wide text-slate-950 bg-gradient-to-r from-cyan-400 via-cyan-300 to-teal-300 hover:from-cyan-300 hover:to-teal-200 transition-all duration-300 shadow-[0_0_28px_-4px_rgba(34,211,238,0.55)] hover:shadow-[0_0_36px_-2px_rgba(34,211,238,0.75)] hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                  onClick={onOpenUpload}
+                  className="group relative inline-flex items-center justify-center gap-3 px-7 py-3.5 rounded-xl font-semibold text-sm tracking-wide text-slate-950 bg-gradient-to-r from-cyan-400 via-cyan-300 to-teal-300 hover:from-cyan-300 hover:to-teal-200 transition-all duration-300 shadow-[0_0_28px_-4px_rgba(34,211,238,0.55)] hover:shadow-[0_0_36px_-2px_rgba(34,211,238,0.75)] hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
                 >
                   <UploadCloud className="w-4 h-4 stroke-[2.2]" />
-                  <span>Upload MRI Scan</span>
+                  <span>Upload MRI Scans</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                <button
+                  onClick={onLaunchWorkstation}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl text-xs font-mono font-medium text-slate-300 bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 hover:text-cyan-300 hover:border-cyan-500/50 transition-all cursor-pointer"
+                >
+                  <span>Launch 3D Workstation</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
                 </button>
               </div>
 
               {/* Privacy-Conscious Statement */}
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <ShieldCheck className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                <span>Local-only processing. MRI files stay on your device.</span>
+                <span>Local-only processing. MRI files stay on your device ({window.location.hostname}).</span>
+              </div>
+            </div>
+
+            {/* Three Concise Capabilities */}
+            <div className="pt-4 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800 space-y-1">
+                <div className="flex items-center gap-1.5 text-cyan-300 text-xs font-semibold">
+                  <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>MRI Overlays</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  Linked Axial, Coronal, and Sagittal orthogonal slice navigation.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800 space-y-1">
+                <div className="flex items-center gap-1.5 text-cyan-300 text-xs font-semibold">
+                  <Box className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>3D Meshes</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  Marching Cubes world-space surface extraction for WT, TC, and ET.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800 space-y-1">
+                <div className="flex items-center gap-1.5 text-cyan-300 text-xs font-semibold">
+                  <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Exact Volumes</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  Physical volumes calculated in mL via NIfTI voxel spacing geometry.
+                </p>
               </div>
             </div>
           </div>
@@ -135,7 +185,7 @@ export default function Hero() {
 
         {/* MRI Upload Panel: Positioned beneath left content with layered overlap aesthetic */}
         <div className="mt-8 lg:mt-10 lg:-mr-12 max-w-2xl">
-          <UploadPanel panelRef={uploadPanelRef} />
+          <UploadPanel panelRef={uploadPanelRef} onOpenModal={onOpenUpload} />
         </div>
 
       </div>

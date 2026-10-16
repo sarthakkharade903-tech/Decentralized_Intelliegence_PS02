@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
 export default function Brain3D() {
   const containerRef = useRef(null);
-  const [modelStatus, setModelStatus] = useState('initializing'); // 'initializing' | 'active'
 
   useEffect(() => {
     const container = containerRef.current;
@@ -312,17 +311,14 @@ export default function Brain3D() {
           masterGroup.remove(activeBrainMesh);
           activeBrainMesh = gltfModel;
           masterGroup.add(activeBrainMesh);
-          setModelStatus('active');
         },
         undefined,
         (err) => {
           console.warn('Using procedural 3D anatomical brain (GLTF info):', err);
-          setModelStatus('active');
         }
       );
     } catch (e) {
       console.warn('Draco setup fallback:', e);
-      setModelStatus('active');
     }
 
     // 9. Pointer Parallax Tracking

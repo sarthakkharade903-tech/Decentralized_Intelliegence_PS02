@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { FilePlus, FileText, X, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
+import { FilePlus, FileText, X, AlertCircle, RotateCcw, ArrowRight, ShieldCheck } from 'lucide-react';
+import { validateNiftiFile } from '../services/api';
 
 const SLOTS = [
   { id: 't1', name: 'T1', label: 'T1 Native' },
@@ -8,7 +9,7 @@ const SLOTS = [
   { id: 'flair', name: 'FLAIR', label: 'FLAIR Edema' }
 ];
 
-export default function UploadPanel({ panelRef }) {
+export default function UploadPanel({ panelRef, onOpenModal }) {
   const [files, setFiles] = useState({
     t1: null,
     t1gd: null,
@@ -30,11 +31,6 @@ export default function UploadPanel({ panelRef }) {
     flair: useRef(null)
   };
 
-  const validateNifti = (filename) => {
-    const lower = filename.toLowerCase();
-    return lower.endsWith('.nii') || lower.endsWith('.nii.gz');
-  };
-
   const formatFileSize = (bytes) => {
     if (!bytes) return '0 B';
     const k = 1024;
@@ -47,10 +43,11 @@ export default function UploadPanel({ panelRef }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!validateNifti(file.name)) {
+    const validation = validateNiftiFile(file);
+    if (!validation.valid) {
       setErrors((prev) => ({
         ...prev,
-        [slotId]: 'Unsupported format. Requires .nii or .nii.gz'
+        [slotId]: validation.error
       }));
       return;
     }
@@ -73,6 +70,16 @@ export default function UploadPanel({ panelRef }) {
     fileInputRefs[slotId].current?.click();
   };
 
+  const handleClearAll = () => {
+    setFiles({ t1: null, t1gd: null, t2: null, flair: null });
+    setErrors({ t1: null, t1gd: null, t2: null, flair: null });
+    Object.values(fileInputRefs).forEach((ref) => {
+      if (ref.current) ref.current.value = '';
+    });
+  };
+
+  const readyCount = Object.values(files).filter(Boolean).length;
+
   return (
     <div
       ref={panelRef}
@@ -80,18 +87,32 @@ export default function UploadPanel({ panelRef }) {
       className="relative z-20 w-full rounded-2xl bg-[#080d19]/80 border border-cyan-500/25 p-5 sm:p-6 backdrop-blur-xl shadow-[0_0_50px_-15px_rgba(6,182,212,0.18)] transition-all duration-300"
     >
       {/* Panel Header */}
-      <div className="flex items-start gap-3.5 mb-5">
-        <div className="p-2 rounded-xl bg-cyan-950/60 border border-cyan-500/30 text-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.2)]">
-          <FilePlus className="w-5 h-5" />
+      <div className="flex items-start justify-between gap-3.5 mb-5">
+        <div className="flex items-start gap-3.5">
+          <div className="p-2 rounded-xl bg-cyan-950/60 border border-cyan-500/30 text-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.2)]">
+            <FilePlus className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight flex items-center gap-2">
+              Upload MRI Scan
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-normal">
+                {readyCount}/4 Ready
+              </span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Select the four co-registered MRI sequences (NIfTI format, max 1 GiB each).
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight">
-            Upload MRI Scan
-          </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Select the four MRI sequences (NIfTI format) to get started.
-          </p>
-        </div>
+
+        {readyCount > 0 && (
+          <button
+            onClick={handleClearAll}
+            className="text-[11px] font-mono text-slate-400 hover:text-slate-200 px-2 py-1 rounded transition-colors"
+          >
+            Clear All
+          </button>
+        )}
       </div>
 
       {/* 4 Sequence Slots Grid */}
@@ -164,7 +185,7 @@ export default function UploadPanel({ panelRef }) {
                 {error && (
                   <div className="flex items-center gap-1 text-[10px] text-rose-300 bg-rose-950/50 px-2 py-1 rounded">
                     <AlertCircle className="w-3 h-3 flex-shrink-0 text-rose-400" />
-                    <span className="truncate">{error}</span>
+                    <span className="truncate" title={error}>{error}</span>
                   </div>
                 )}
               </div>
@@ -201,6 +222,22 @@ export default function UploadPanel({ panelRef }) {
             </div>
           );
         })}
+      </div>
+
+      {/* Action Footer */}
+      <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 text-slate-400">
+          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <span>Local client-side validation · 1 GiB per-file limit</span>
+        </div>
+
+        <button
+          onClick={onOpenModal}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-cyan-300 bg-cyan-950/40 border border-cyan-500/40 hover:bg-cyan-900/50 hover:border-cyan-400 hover:text-white transition-all cursor-pointer shadow-[0_0_12px_-2px_rgba(34,211,238,0.2)]"
+        >
+          <span>Open Full Ingestion Console</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );

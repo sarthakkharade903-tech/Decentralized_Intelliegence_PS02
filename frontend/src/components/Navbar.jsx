@@ -1,11 +1,19 @@
 import React from 'react';
 
-export default function Navbar() {
+export default function Navbar({
+  currentPage = 'landing',
+  onNavigate = () => {},
+  onOpenUpload = () => {}
+}) {
   return (
-    <header className="relative z-30 w-full bg-[#06080D]/90">
+    <header className="relative z-30 w-full bg-[#06080D]/90 border-b border-slate-900/60">
       <div className="max-w-7xl mx-auto px-6 h-16 sm:h-20 flex items-center justify-between">
         {/* Left: Brain Icon & NeuroVault Wordmark */}
-        <div className="flex items-center gap-3 cursor-pointer group">
+        <div
+          onClick={() => onNavigate('landing')}
+          className="flex items-center gap-3 cursor-pointer group"
+          title="Return to Home"
+        >
           {/* Anatomical Brain SVG Icon */}
           <div className="relative w-8 h-8 flex items-center justify-center text-cyan-400 group-hover:text-cyan-300 transition-colors">
             <svg
@@ -35,18 +43,59 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Center: Only "Home" navigation item with glowing active indicator */}
-        <nav className="flex items-center justify-center">
-          <div className="relative cursor-pointer group py-1">
-            <span className="text-sm font-medium text-cyan-300 tracking-wide font-sans group-hover:text-cyan-200 transition-colors">
+        {/* Center: Navigation tabs (Home & Workstation) */}
+        <nav className="flex items-center gap-8">
+          {/* Home Tab */}
+          <button
+            onClick={() => onNavigate('landing')}
+            className="relative cursor-pointer group py-1 text-left focus:outline-none"
+          >
+            <span
+              className={`text-sm font-medium tracking-wide font-sans transition-colors ${
+                currentPage === 'landing'
+                  ? 'text-cyan-300 font-semibold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
               Home
             </span>
-            <div className="w-5 h-0.5 bg-gradient-to-r from-cyan-400 to-teal-400 rounded-full mx-auto mt-1 shadow-[0_0_8px_#22d3ee]" />
-          </div>
+            {currentPage === 'landing' && (
+              <div className="w-5 h-0.5 bg-gradient-to-r from-cyan-400 to-teal-400 rounded-full mx-auto mt-1 shadow-[0_0_8px_#22d3ee]" />
+            )}
+          </button>
+
+          {/* Workstation Tab */}
+          <button
+            onClick={() => onNavigate('workstation')}
+            className="relative cursor-pointer group py-1 text-left focus:outline-none flex items-center gap-1.5"
+          >
+            <span
+              className={`text-sm font-medium tracking-wide font-sans transition-colors ${
+                currentPage === 'workstation'
+                  ? 'text-cyan-300 font-semibold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Workstation
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/60">
+              3D
+            </span>
+            {currentPage === 'workstation' && (
+              <div className="w-6 h-0.5 bg-gradient-to-r from-cyan-400 to-teal-400 rounded-full mx-auto mt-1 shadow-[0_0_8px_#22d3ee]" />
+            )}
+          </button>
         </nav>
 
-        {/* Right side spacer for balanced centering */}
-        <div className="w-24 hidden sm:block" />
+        {/* Right side: Quick Ingestion Button */}
+        <div className="flex items-center justify-end">
+          <button
+            onClick={onOpenUpload}
+            className="px-3.5 py-1.5 rounded-lg text-xs font-mono font-medium text-cyan-300 border border-cyan-500/40 bg-cyan-950/40 hover:bg-cyan-900/50 hover:border-cyan-400 hover:text-white transition-all cursor-pointer shadow-[0_0_10px_-2px_rgba(34,211,238,0.2)]"
+          >
+            Upload Sequences
+          </button>
+        </div>
       </div>
     </header>
   );
