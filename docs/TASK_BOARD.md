@@ -18,8 +18,10 @@ This backlog organizes the project into prioritized phases for the 24-hour sprin
 - [x] **Task 0.2**: Initialize Git repository and link to remote `sarthakkharade903-tech/NeuroScope-3D`.
 - [x] **Task 0.3**: Establish `.gitignore` to prevent leaks of NIfTI scans, weights, and secrets.
 - [x] **Task 0.4**: Establish comprehensive architecture, UI rules, team workflow, and onboarding documentation.
-- [ ] **Task 0.5**: Create Python 3.11 virtual environment (`.venv`) and define initial `backend/requirements.txt` with PyTorch, MONAI, and FastAPI.
-- [ ] **Task 0.6**: Bootstrap `frontend/` with Vite + React + Tailwind CSS.
+- [x] **Task 0.5**: Bootstrap `frontend/` with Vite 8 + React 19 + Tailwind CSS v4 + Lucide React.
+- [x] **Task 0.6**: Build NeuroVault Landing Hero Page with 3D anatomical brain visual, scanline laser sweep, editorial typography, and local privacy statement.
+- [x] **Task 0.7**: Build 4-Sequence Upload Modal (T1, T1Gd, T2, FLAIR) with `.nii` / `.nii.gz` local browser validation, batch drop detection, and backend standby notices.
+- [ ] **Task 0.8**: Create Python 3.11 virtual environment (`.venv`) and define initial `backend/requirements.txt` with PyTorch, MONAI, and FastAPI.
 
 ---
 
