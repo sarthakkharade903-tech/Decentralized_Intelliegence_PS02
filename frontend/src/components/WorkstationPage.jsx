@@ -34,6 +34,7 @@ import {
   BRATS_REGIONS
 } from '../lib/metrics';
 import { parseNiftiVolume } from './viewer/SurfaceExtractor';
+import { validateOverlayGeometry } from './viewer/GeometryValidator';
 
 export default function WorkstationPage({
   onBackToHome,
@@ -60,6 +61,7 @@ export default function WorkstationPage({
   const [evaluationMetrics, setEvaluationMetrics] = useState(null);
   const [hd95Data, setHd95Data] = useState(null);
   const [fileHashes, setFileHashes] = useState({});
+  const [expertMismatchError, setExpertMismatchError] = useState(null);
 
   // Error map overlay sub-toggles
   const [showTP, setShowTP] = useState(true);
@@ -193,34 +195,63 @@ export default function WorkstationPage({
         }
       }
 
+      if (sessionFiles?.predictionMask && typeof sessionFiles.predictionMask.arrayBuffer === 'function') {
+        try {
+          const buf = await sessionFiles.predictionMask.arrayBuffer();
+          parsedPred = parseNiftiVolume(buf);
+        } catch (e) {
+          console.warn('[TrustLayer] Failed to parse prediction mask file', e);
+        }
+      }
+
       const parsedVolumes = {
         predVolume: parsedPred?.volume || null,
         predDims: parsedPred?.dims || geometryData.dimensions,
+        predPixDims: parsedPred?.pixDims || null,
         predAffine: parsedPred?.affine || null,
         refVolume: parsedRef?.volume || null,
         refDims: parsedRef?.dims || null,
+        refPixDims: parsedRef?.pixDims || null,
+        refAffine: parsedRef?.affine || null,
       };
 
       const checks = await runTrustLayer(sessionFiles, predictionData, parsedVolumes);
       setTrustChecks(checks);
 
-      // 3. Compute real evaluation metrics if both pred and ref are available
+      // 3. Compute real evaluation metrics if both pred and ref are available AND geometrically aligned
       if (parsedVolumes.predVolume && parsedVolumes.refVolume) {
-        const metrics = computeAllMetrics(
-          parsedVolumes.predVolume,
-          parsedVolumes.refVolume,
-          parsedVolumes.predDims,
-          parsedVolumes.predAffine
+        const geoCheck = validateOverlayGeometry(
+          { dims: parsedVolumes.predDims, pixDims: parsedVolumes.predPixDims, affine: parsedVolumes.predAffine },
+          { dims: parsedVolumes.refDims,  pixDims: parsedVolumes.refPixDims,  affine: parsedVolumes.refAffine }
         );
-        setEvaluationMetrics(metrics);
 
-        const hd95Results = {};
-        for (const [regionName, labelSet] of Object.entries(BRATS_REGIONS)) {
-          const pMask = computeRegionMask(parsedVolumes.predVolume, parsedVolumes.predDims, labelSet);
-          const rMask = computeRegionMask(parsedVolumes.refVolume, parsedVolumes.predDims, labelSet);
-          hd95Results[regionName] = hd95(pMask, rMask, parsedVolumes.predDims, parsedVolumes.predAffine);
+        if (geoCheck.valid) {
+          setExpertMismatchError(null);
+          const metrics = computeAllMetrics(
+            parsedVolumes.predVolume,
+            parsedVolumes.refVolume,
+            parsedVolumes.predDims,
+            parsedVolumes.predAffine
+          );
+          setEvaluationMetrics(metrics);
+
+          const hd95Results = {};
+          for (const [regionName, labelSet] of Object.entries(BRATS_REGIONS)) {
+            const pMask = computeRegionMask(parsedVolumes.predVolume, parsedVolumes.predDims, labelSet);
+            const rMask = computeRegionMask(parsedVolumes.refVolume, parsedVolumes.predDims, labelSet);
+            hd95Results[regionName] = hd95(pMask, rMask, parsedVolumes.predDims, parsedVolumes.predAffine);
+          }
+          setHd95Data(hd95Results);
+        } else {
+          console.warn('[TrustLayer] Prediction and expert geometry mismatch — metrics withheld', geoCheck.error);
+          setEvaluationMetrics(null);
+          setHd95Data(null);
+          setExpertMismatchError(geoCheck.error);
         }
-        setHd95Data(hd95Results);
+      } else {
+        setEvaluationMetrics(null);
+        setHd95Data(null);
+        setExpertMismatchError(null);
       }
 
       if (parsedVolumes.predVolume) {
@@ -646,6 +677,7 @@ CLINICAL INDICES:
               predictionData={patientCase}
               provenance={provenanceData}
               isSynthetic={!predictionData}
+              expertError={expertMismatchError}
             />
 
             {/* Surgical & Clinical Indices (RANO Criteria) */}

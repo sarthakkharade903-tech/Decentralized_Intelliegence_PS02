@@ -38,13 +38,42 @@ export function voxelToWorld(affine, voxel) {
   return [Math.round(x * 100) / 100, Math.round(y * 100) / 100, Math.round(z * 100) / 100];
 }
 
+function extract3D(arr) {
+  if (!arr || !Array.isArray(arr)) return null;
+  if (arr.length >= 4) return [arr[1], arr[2], arr[3]];
+  if (arr.length === 3) return [arr[0], arr[1], arr[2]];
+  return null;
+}
+
+function normalizeAffine4x4(affine) {
+  if (!affine) return null;
+  if (Array.isArray(affine) && affine.length >= 4 && Array.isArray(affine[0])) {
+    return [
+      [affine[0][0], affine[0][1], affine[0][2], affine[0][3] ?? 0],
+      [affine[1][0], affine[1][1], affine[1][2], affine[1][3] ?? 0],
+      [affine[2][0], affine[2][1], affine[2][2], affine[2][3] ?? 0],
+      [affine[3]?.[0] ?? 0, affine[3]?.[1] ?? 0, affine[3]?.[2] ?? 0, affine[3]?.[3] ?? 1]
+    ];
+  }
+  if ((Array.isArray(affine) || ArrayBuffer.isView(affine)) && affine.length === 16) {
+    // Column-major (NiiVue / WebGL standard)
+    return [
+      [affine[0], affine[4], affine[8], affine[12]],
+      [affine[1], affine[5], affine[9], affine[13]],
+      [affine[2], affine[6], affine[10], affine[14]],
+      [affine[3], affine[7], affine[11], affine[15]]
+    ];
+  }
+  return null;
+}
+
 /**
  * Validates that an overlay segmentation mask matches the reference background MRI's
- * spatial grid, dimensions, and voxel spacing.
+ * spatial grid, dimensions, voxel spacing, and affine orientation.
  *
  * @param {object} baseVol - Base background MRI volume metadata { dims, pixDims, affine }
  * @param {object} maskVol - Overlay mask volume metadata { dims, pixDims, affine }
- * @returns {{ valid: boolean, error?: string, details?: object }}
+ * @returns {{ valid: boolean, error?: string, details?: object, warning?: string }}
  */
 export function validateOverlayGeometry(baseVol, maskVol) {
   if (!baseVol || !maskVol) {
@@ -55,8 +84,8 @@ export function validateOverlayGeometry(baseVol, maskVol) {
   }
 
   // 1. Check spatial grid dimensions [dimX, dimY, dimZ]
-  const baseDims = baseVol.dims ? baseVol.dims.slice(1, 4) : baseVol.dimensions;
-  const maskDims = maskVol.dims ? maskVol.dims.slice(1, 4) : maskVol.dimensions;
+  const baseDims = extract3D(baseVol.dims) || baseVol.dimensions;
+  const maskDims = extract3D(maskVol.dims) || maskVol.dimensions;
 
   if (baseDims && maskDims) {
     const dimsMatch =
@@ -77,8 +106,8 @@ export function validateOverlayGeometry(baseVol, maskVol) {
   }
 
   // 2. Check voxel spacing in millimetres (tolerance: 0.05mm)
-  const baseSpacing = baseVol.pixDims ? baseVol.pixDims.slice(1, 4) : baseVol.voxelSpacing;
-  const maskSpacing = maskVol.pixDims ? maskVol.pixDims.slice(1, 4) : maskVol.voxelSpacing;
+  const baseSpacing = extract3D(baseVol.pixDims) || baseVol.voxelSpacing;
+  const maskSpacing = extract3D(maskVol.pixDims) || maskVol.voxelSpacing;
 
   if (baseSpacing && maskSpacing) {
     const tolerance = 0.05;
@@ -99,7 +128,45 @@ export function validateOverlayGeometry(baseVol, maskVol) {
     }
   }
 
-  return { valid: true, compatible: true };
+  // 3. Check spatial affine alignment (if affines are provided on both)
+  let affineWarning = null;
+  if (baseVol.affine && maskVol.affine) {
+    const normBase = normalizeAffine4x4(baseVol.affine);
+    const normMask = normalizeAffine4x4(maskVol.affine);
+    if (normBase && normMask) {
+      // Origin translation tolerance: 0.5 mm
+      const origMismatch =
+        Math.abs(normBase[0][3] - normMask[0][3]) > 0.5 ||
+        Math.abs(normBase[1][3] - normMask[1][3]) > 0.5 ||
+        Math.abs(normBase[2][3] - normMask[2][3]) > 0.5;
+
+      // Rotation & scaling tolerance: 0.05
+      let rotMismatch = false;
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          if (Math.abs(normBase[r][c] - normMask[r][c]) > 0.05) {
+            rotMismatch = true;
+            break;
+          }
+        }
+      }
+
+      if (origMismatch || rotMismatch) {
+        const msg = 'Spatial affine orientation or origin mismatch between reference MRI and overlay. Equal dimensions do not prove affine alignment.';
+        return {
+          valid: false,
+          compatible: false,
+          error: msg,
+          reason: msg,
+          details: { origMismatch, rotMismatch }
+        };
+      }
+    }
+  } else if (!baseVol.affine || !maskVol.affine) {
+    affineWarning = 'Spatial affine matrix missing on one or more volumes; verified dimensions and spacing only.';
+  }
+
+  return { valid: true, compatible: true, warning: affineWarning };
 }
 
 /**

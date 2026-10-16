@@ -120,6 +120,49 @@ describe('Viewer Geometry Validator: Overlay Geometry Validation', () => {
     assert.equal(validateOverlayGeometry(validVol, null).valid, false);
     assert.match(validateOverlayGeometry(null, validVol).error, /Missing volume/);
   });
+
+  test('accepts 3-element dims array [nx, ny, nz] without indexing errors', () => {
+    const base = { dims: [240, 240, 155], pixDims: [1.0, 1.0, 1.0] };
+    const mask = { dims: [240, 240, 155], pixDims: [1.0, 1.0, 1.0] };
+    const r = validateOverlayGeometry(base, mask);
+    assert.equal(r.valid, true);
+  });
+
+  test('detects spatial affine origin mismatch despite identical grid dimensions', () => {
+    // Both volumes have identical dimensions [240, 240, 155] and 1.0mm spacing
+    const base = {
+      dims: [240, 240, 155],
+      pixDims: [1.0, 1.0, 1.0],
+      affine: [
+        [1, 0, 0, -120],
+        [0, 1, 0, -120],
+        [0, 0, 1, -78],
+        [0, 0, 0, 1]
+      ]
+    };
+    const shiftedMask = {
+      dims: [240, 240, 155],
+      pixDims: [1.0, 1.0, 1.0],
+      affine: [
+        [1, 0, 0, -100], // 20mm origin shift in x!
+        [0, 1, 0, -120],
+        [0, 0, 1, -78],
+        [0, 0, 0, 1]
+      ]
+    };
+    const r = validateOverlayGeometry(base, shiftedMask);
+    assert.equal(r.valid, false);
+    assert.match(r.error, /Spatial affine orientation or origin mismatch/i);
+    assert.match(r.error, /Equal dimensions do not prove affine alignment/i);
+  });
+
+  test('reports warning when affine matrix is omitted on one volume', () => {
+    const base = { dims: [240, 240, 155], pixDims: [1.0, 1.0, 1.0], affine: [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]] };
+    const maskWithoutAffine = { dims: [240, 240, 155], pixDims: [1.0, 1.0, 1.0] };
+    const r = validateOverlayGeometry(base, maskWithoutAffine);
+    assert.equal(r.valid, true);
+    assert.ok(r.warning.includes('Spatial affine matrix missing'));
+  });
 });
 
 describe('Viewer Geometry Validator: BraTS 2021 Discrete Colormap', () => {

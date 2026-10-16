@@ -40,15 +40,27 @@
  * Compute the physical volume of one voxel in mm³.
  * Uses |det(A_3x3)| of the NIfTI affine matrix.
  *
- * @param {number[][] | null} affine - 4×4 row-major affine array, or null
+ * @param {number[][] | Float32Array | number[] | null} affine - 4×4 row-major array or 16-element column-major array
+ * @param {number} [unitScale=1.0] - scale factor to millimetres (1.0 for mm, 1000 for meters)
  * @returns {number} voxel volume in mm³, or NaN if affine is invalid
  */
-export function computeVoxelVolume(affine) {
-  if (!affine || !Array.isArray(affine) || affine.length < 4) return NaN;
+export function computeVoxelVolume(affine, unitScale = 1.0) {
+  if (!affine) return NaN;
 
-  // Extract top-left 3×3
-  const [r0, r1, r2] = [affine[0], affine[1], affine[2]];
-  if (!r0 || !r1 || !r2 || r0.length < 3 || r1.length < 3 || r2.length < 3) return NaN;
+  let r0, r1, r2;
+
+  if (Array.isArray(affine) && affine.length >= 3 && Array.isArray(affine[0])) {
+    // 2D 4×4 row-major array
+    [r0, r1, r2] = [affine[0], affine[1], affine[2]];
+    if (!r0 || !r1 || !r2 || r0.length < 3 || r1.length < 3 || r2.length < 3) return NaN;
+  } else if ((Array.isArray(affine) || (ArrayBuffer.isView(affine) && !(affine instanceof DataView))) && affine.length === 16) {
+    // 1D 16-element column-major array (NiiVue / WebGL standard)
+    r0 = [affine[0], affine[4], affine[8]];
+    r1 = [affine[1], affine[5], affine[9]];
+    r2 = [affine[2], affine[6], affine[10]];
+  } else {
+    return NaN;
+  }
 
   const a = r0[0], b = r0[1], c = r0[2];
   const d = r1[0], e = r1[1], f = r1[2];
@@ -56,7 +68,10 @@ export function computeVoxelVolume(affine) {
 
   const det = a * (e * k - f * h) - b * (d * k - f * g) + c * (d * h - e * g);
   if (!isFinite(det)) return NaN;
-  return Math.abs(det);
+  const absDet = Math.abs(det);
+  const scale = Number(unitScale);
+  const factor = isFinite(scale) && scale > 0 ? Math.pow(scale, 3) : 1.0;
+  return absDet * factor;
 }
 
 /**
@@ -64,15 +79,16 @@ export function computeVoxelVolume(affine) {
  *
  * @param {Uint8Array|Int16Array|Int32Array|Float32Array} volume - flat label array
  * @param {number[]} dims - [nx, ny, nz]
- * @param {number[][] | null} affine - 4×4 affine
+ * @param {number[][] | Float32Array | number[] | null} affine - 4×4 affine
+ * @param {number} [unitScale=1.0] - scale factor to millimetres
  * @returns {{ ET: RegionStats, TC: RegionStats, WT: RegionStats, NETC: RegionStats, ED: RegionStats }}
  *
  * @typedef {{ voxels: number, mm3: number, ml: number }} RegionStats
  */
-export function computeRegionVolumes(volume, dims, affine) {
+export function computeRegionVolumes(volume, dims, affine, unitScale = 1.0) {
   if (!volume || !dims) throw new Error('computeRegionVolumes: volume and dims are required');
 
-  const voxelMm3 = computeVoxelVolume(affine);
+  const voxelMm3 = computeVoxelVolume(affine, unitScale);
   const usePhysical = isFinite(voxelMm3) && voxelMm3 > 0;
 
   // Count voxels per label
@@ -317,15 +333,28 @@ function physicalDistance(a, b, spacing) {
  * @returns {number[]} [sx, sy, sz], falls back to [1, 1, 1]
  */
 function spacingFromAffine(affine) {
-  if (!affine || affine.length < 3) return [1, 1, 1];
-  const sx = Math.sqrt(affine[0][0]**2 + affine[1][0]**2 + affine[2][0]**2);
-  const sy = Math.sqrt(affine[0][1]**2 + affine[1][1]**2 + affine[2][1]**2);
-  const sz = Math.sqrt(affine[0][2]**2 + affine[1][2]**2 + affine[2][2]**2);
-  return [
-    isFinite(sx) && sx > 0 ? sx : 1,
-    isFinite(sy) && sy > 0 ? sy : 1,
-    isFinite(sz) && sz > 0 ? sz : 1,
-  ];
+  if (!affine) return [1, 1, 1];
+  if (Array.isArray(affine) && affine.length >= 3 && Array.isArray(affine[0])) {
+    const sx = Math.sqrt(affine[0][0]**2 + affine[1][0]**2 + affine[2][0]**2);
+    const sy = Math.sqrt(affine[0][1]**2 + affine[1][1]**2 + affine[2][1]**2);
+    const sz = Math.sqrt(affine[0][2]**2 + affine[1][2]**2 + affine[2][2]**2);
+    return [
+      isFinite(sx) && sx > 0 ? sx : 1,
+      isFinite(sy) && sy > 0 ? sy : 1,
+      isFinite(sz) && sz > 0 ? sz : 1,
+    ];
+  }
+  if ((Array.isArray(affine) || (ArrayBuffer.isView(affine) && !(affine instanceof DataView))) && affine.length === 16) {
+    const sx = Math.sqrt(affine[0]**2 + affine[1]**2 + affine[2]**2);
+    const sy = Math.sqrt(affine[4]**2 + affine[5]**2 + affine[6]**2);
+    const sz = Math.sqrt(affine[8]**2 + affine[9]**2 + affine[10]**2);
+    return [
+      isFinite(sx) && sx > 0 ? sx : 1,
+      isFinite(sy) && sy > 0 ? sy : 1,
+      isFinite(sz) && sz > 0 ? sz : 1,
+    ];
+  }
+  return [1, 1, 1];
 }
 
 /**

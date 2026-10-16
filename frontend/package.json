@@ -8,6 +8,9 @@
     "build": "vite build",
     "lint": "oxlint src",
     "test": "node --test test/*.test.js",
+    "test:unit": "node --test test/metrics.test.js test/viewer.test.js",
+    "test:trust": "node --test test/trustAndBenchmark.test.js",
+    "test:integration": "node --test test/api.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

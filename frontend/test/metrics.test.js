@@ -128,6 +128,41 @@ describe('Metrics: computeVoxelVolume', () => {
     const v = computeVoxelVolume(affine);
     assert.equal(v, 0);
   });
+
+  test('flat 16-element column-major array (NiiVue mat4) → voxel volume = 1 mm³', () => {
+    // 4×4 identity matrix as flat column-major 16-element Float32Array
+    const flatMat = new Float32Array([
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]);
+    const v = computeVoxelVolume(flatMat);
+    assert.equal(v, 1.0);
+  });
+
+  test('spatial unit scaling: converts meter affine to mm³', () => {
+    // 1mm isotropic expressed in meters: 0.001 m spacing
+    const meterAffine = [
+      [0.001, 0, 0, 0],
+      [0, 0.001, 0, 0],
+      [0, 0, 0.001, 0],
+      [0, 0, 0, 1]
+    ];
+    // With unitScale = 1000 (1000 mm per meter)
+    const vMm3 = computeVoxelVolume(meterAffine, 1000);
+    assert.ok(Math.abs(vMm3 - 1.0) < 1e-6, `Expected 1.0 mm³, got ${vMm3}`);
+  });
+
+  test('affine with non-finite values → returns NaN', () => {
+    const nanAffine = [
+      [NaN, 0, 0, 0],
+      [0, 1, 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1]
+    ];
+    assert.ok(isNaN(computeVoxelVolume(nanAffine)));
+  });
 });
 
 // ---------------------------------------------------------------------------

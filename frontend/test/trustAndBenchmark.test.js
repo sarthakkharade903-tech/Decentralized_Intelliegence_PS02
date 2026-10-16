@@ -117,6 +117,97 @@ describe('Trust Layer: Input Integrity & Pre-Flight Checks', () => {
     const checksNegative = await runTrustLayer(null, negativeResponse, null);
     const backendCheckNegative = checksNegative.find((c) => c.id === 'backend_response_valid');
     assert.equal(backendCheckNegative.status, 'warn');
+
+    // Untrained live model weights (model_weights_present: false)
+    const untrainedLiveResponse = {
+      patient_id: 'TEST_UNTRAINED',
+      isLiveInference: true,
+      model_weights_present: false,
+      volumes_ml: {
+        whole_tumor: 13.19,
+        tumor_core: 9.27,
+        enhancing_tumor: 5.49,
+      },
+    };
+    const checksUntrained = await runTrustLayer(null, untrainedLiveResponse, null);
+    const backendCheckUntrained = checksUntrained.find((c) => c.id === 'backend_response_valid');
+    assert.equal(backendCheckUntrained.status, 'warn');
+    assert.match(backendCheckUntrained.message, /UNTRAINED model weights/i);
+  });
+
+  test('reports evidence-based statusLabel and category on all checks', async () => {
+    const checks = await runTrustLayer(null, null, null);
+    const validStatuses = new Set(['Passed', 'Warning', 'Failed', 'Not checked', 'Not available']);
+    const validCategories = new Set(['Input validation', 'Prediction validation', 'Expert-mask alignment']);
+
+    for (const check of checks) {
+      assert.ok(validStatuses.has(check.statusLabel), `check ${check.id} has invalid statusLabel: ${check.statusLabel}`);
+      assert.ok(validCategories.has(check.category), `check ${check.id} has invalid category: ${check.category}`);
+    }
+  });
+
+  test('flags expert mask checks as "Not checked" when expert segmentation is not provided', async () => {
+    const parsedVolumes = {
+      predVolume: new Uint8Array([0, 1, 2, 4]),
+      predDims: [2, 2, 1],
+      refVolume: null, // No expert provided
+    };
+    const checks = await runTrustLayer(null, null, parsedVolumes);
+
+    const expertLabels = checks.find((c) => c.id === 'expert_labels_valid');
+    assert.equal(expertLabels.status, 'not_checked');
+    assert.equal(expertLabels.statusLabel, 'Not checked');
+
+    const expertAlignment = checks.find((c) => c.id === 'pred_expert_alignment');
+    assert.equal(expertAlignment.status, 'not_checked');
+    assert.equal(expertAlignment.statusLabel, 'Not checked');
+  });
+
+  test('detects prediction-expert spatial alignment mismatch when grids differ', async () => {
+    const parsedVolumes = {
+      predVolume: new Uint8Array(8),
+      predDims: [2, 2, 2],
+      predPixDims: [1.0, 1.0, 1.0],
+      refVolume: new Uint8Array(12),
+      refDims: [3, 2, 2], // Dimension mismatch!
+      refPixDims: [1.0, 1.0, 1.0],
+    };
+    const checks = await runTrustLayer(null, null, parsedVolumes);
+    const alignmentCheck = checks.find((c) => c.id === 'pred_expert_alignment');
+    assert.equal(alignmentCheck.status, 'fail');
+    assert.equal(alignmentCheck.statusLabel, 'Failed');
+    assert.match(alignmentCheck.detail, /Incompatible spatial dimensions/);
+  });
+
+  test('validates prediction-expert spatial alignment when grids and affines match', async () => {
+    const affine = [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
+    const parsedVolumes = {
+      predVolume: new Uint8Array([0, 1, 2, 4]),
+      predDims: [2, 2, 1],
+      predPixDims: [1.0, 1.0, 1.0],
+      predAffine: affine,
+      refVolume: new Uint8Array([0, 1, 2, 4]),
+      refDims: [2, 2, 1],
+      refPixDims: [1.0, 1.0, 1.0],
+      refAffine: affine,
+    };
+    const checks = await runTrustLayer(null, null, parsedVolumes);
+    const alignmentCheck = checks.find((c) => c.id === 'pred_expert_alignment');
+    assert.equal(alignmentCheck.status, 'pass');
+    assert.equal(alignmentCheck.statusLabel, 'Passed');
+  });
+
+  test('transparently documents unverified live backend inference status', async () => {
+    const candidateResponse = {
+      patient_id: 'CANDIDATE_CASE',
+      isLiveInference: false, // Server offline / candidate prototype
+      volumes_ml: { whole_tumor: 40.0, tumor_core: 20.0, enhancing_tumor: 10.0 },
+    };
+    const checks = await runTrustLayer(null, candidateResponse, null);
+    const backendCheck = checks.find((c) => c.id === 'backend_response_valid');
+    assert.equal(backendCheck.status, 'pass');
+    assert.match(backendCheck.message, /live inference unverified/i);
+    assert.match(backendCheck.detail, /candidate research data/i);
   });
 });
 

@@ -24,16 +24,27 @@ const VALID_BRATS_LABELS = new Set([0, 1, 2, 4]);
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+function normalizeStatus(status) {
+  if (status === 'pass' || status === 'passed') return { status: 'pass', statusLabel: 'Passed' };
+  if (status === 'warn' || status === 'warning') return { status: 'warn', statusLabel: 'Warning' };
+  if (status === 'fail' || status === 'failed') return { status: 'fail', statusLabel: 'Failed' };
+  if (status === 'not_checked') return { status: 'not_checked', statusLabel: 'Not checked' };
+  return { status: 'na', statusLabel: 'Not available' };
+}
+
 /** Run an async check and catch any thrown error as a fail result. */
-async function safeCheck(id, label, fn) {
+async function safeCheck(id, label, category, fn) {
   try {
     const result = await fn();
-    return { id, label, ...result };
+    const norm = normalizeStatus(result.status);
+    return { id, label, category, ...result, status: norm.status, statusLabel: norm.statusLabel };
   } catch (err) {
     return {
       id,
       label,
+      category,
       status: 'fail',
+      statusLabel: 'Failed',
       message: 'Check threw unexpected error',
       detail: String(err?.message ?? err),
     };
@@ -46,7 +57,7 @@ async function tryParse(file) {
     const buffer = await file.arrayBuffer();
     const parsed = parseNiftiVolume(buffer);
     return { buffer, parsed };
-  } catch (_e) {
+  } catch {
     return null;
   }
 }
@@ -111,7 +122,7 @@ export async function runTrustLayer(sessionFiles, predictionData, parsedVolumes)
   // ------------------------------------------------------------------
   // CHECK 1: All 4 required modalities present
   // ------------------------------------------------------------------
-  checks.push(await safeCheck('modalities_present', 'All 4 MRI modalities present', async () => {
+  checks.push(await safeCheck('modalities_present', 'All 4 MRI modalities present', 'Input validation', async () => {
     if (!sessionFiles) {
       return { status: 'na', message: 'No session files available (demo mode)', detail: null };
     }
@@ -129,7 +140,7 @@ export async function runTrustLayer(sessionFiles, predictionData, parsedVolumes)
   // ------------------------------------------------------------------
   // CHECK 2: File sizes within 1 GiB each
   // ------------------------------------------------------------------
-  checks.push(await safeCheck('file_sizes', 'File sizes within 1 GiB limit', async () => {
+  checks.push(await safeCheck('file_sizes', 'File sizes within 1 GiB limit', 'Input validation', async () => {
     if (!sessionFiles) return { status: 'na', message: 'No session files (demo mode)', detail: null };
     const oversized = modalityKeys.filter((k) => sessionFiles[k]?.size > ONE_GIB);
     if (oversized.length === 0) {
@@ -146,7 +157,7 @@ export async function runTrustLayer(sessionFiles, predictionData, parsedVolumes)
   // CHECK 3: Files parse as valid NIfTI-1 / NIfTI-2
   // ------------------------------------------------------------------
   const parsedModalities = {};
-  checks.push(await safeCheck('nifti_valid', 'Files parseable as NIfTI-1/2', async () => {
+  checks.push(await safeCheck('nifti_valid', 'Files parseable as NIfTI-1/2', 'Input validation', async () => {
     if (!sessionFiles) return { status: 'na', message: 'No session files (demo mode)', detail: null };
     const failed = [];
     for (const key of modalityKeys) {
@@ -169,7 +180,7 @@ export async function runTrustLayer(sessionFiles, predictionData, parsedVolumes)
   // ------------------------------------------------------------------
   // CHECK 4: Volumes are 3-D, finite, and non-constant
   // ------------------------------------------------------------------
-  checks.push(await safeCheck('volume_sanity', 'Volumes are 3-D, finite, and non-constant', async () => {
+  checks.push(await safeCheck('volume_sanity', 'Volumes are 3-D, finite, and non-constant', 'Input validation', async () => {
     if (!sessionFiles || Object.keys(parsedModalities).length === 0) {
       return { status: 'na', message: 'No parsed modalities available', detail: null };
     }
@@ -190,13 +201,28 @@ export async function runTrustLayer(sessionFiles, predictionData, parsedVolumes)
   }));
 
   // ------------------------------------------------------------------
-  // CHECK 5: Modality grid dimensions are mutually compatible
+  // CHECK 5: Modality grid dimensions & spatial units
   // ------------------------------------------------------------------
-  checks.push(await safeCheck('geometry_compatible', 'Modality grids are geometrically compatible', async () => {
+  checks.push(await safeCheck('geometry_compatible', 'Modality grids and spatial units are compatible', 'Input validation', async () => {
     const parsed = Object.values(parsedModalities).filter(Boolean);
     if (parsed.length < 2) {
       return { status: 'na', message: 'Need ≥2 parsed modalities to compare', detail: null };
     }
+
+    // Spatial units check: ensure voxel spacing is within typical MRI range in mm (0.05 - 10 mm)
+    for (const [key, p] of Object.entries(parsedModalities)) {
+      if (p?.pixDims) {
+        const [sx, sy, sz] = p.pixDims;
+        if (sx < 0.05 || sy < 0.05 || sz < 0.05) {
+          return {
+            status: 'warn',
+            message: `Modality ${key} has unusually small voxel spacing (<0.05 mm)`,
+            detail: 'Check whether spatial units are declared in meters instead of millimetres.'
+          };
+        }
+      }
+    }
+
     const ref = parsed[0];
     for (let i = 1; i < parsed.length; i++) {
       const r = validateOverlayGeometry(ref, parsed[i]);
@@ -204,18 +230,18 @@ export async function runTrustLayer(sessionFiles, predictionData, parsedVolumes)
       if (!isValid) {
         return {
           status: 'fail',
-          message: 'Modality dimension or spacing mismatch',
+          message: 'Modality dimension, spacing, or affine mismatch',
           detail: r.error ?? r.reason,
         };
       }
     }
-    return { status: 'pass', message: 'All modality grids are compatible', detail: null };
+    return { status: 'pass', message: 'All modality grids and spatial spacings are compatible (mm)', detail: null };
   }));
 
   // ------------------------------------------------------------------
   // CHECK 6: Affine is valid (finite, non-degenerate determinant)
   // ------------------------------------------------------------------
-  checks.push(await safeCheck('affine_valid', 'NIfTI affine is valid and non-degenerate', async () => {
+  checks.push(await safeCheck('affine_valid', 'NIfTI affine is valid and non-degenerate', 'Prediction validation', async () => {
     const parsed = Object.values(parsedModalities).filter(Boolean);
     if (parsed.length === 0) {
       // Try parsedVolumes fallback
@@ -249,7 +275,7 @@ export async function runTrustLayer(sessionFiles, predictionData, parsedVolumes)
   // ------------------------------------------------------------------
   // CHECK 7: Prediction label set matches BraTS {0, 1, 2, 4}
   // ------------------------------------------------------------------
-  checks.push(await safeCheck('pred_labels_valid', 'Prediction labels match BraTS 2021 convention {0,1,2,4}', async () => {
+  checks.push(await safeCheck('pred_labels_valid', 'Prediction labels match BraTS 2021 convention {0,1,2,4}', 'Prediction validation', async () => {
     if (!parsedVolumes?.predVolume) {
       return { status: 'na', message: 'No parsed prediction volume available', detail: null };
     }
@@ -267,9 +293,9 @@ export async function runTrustLayer(sessionFiles, predictionData, parsedVolumes)
   // ------------------------------------------------------------------
   // CHECK 8: Expert mask label set matches BraTS {0, 1, 2, 4} (if provided)
   // ------------------------------------------------------------------
-  checks.push(await safeCheck('expert_labels_valid', 'Expert mask labels match BraTS 2021 convention (if provided)', async () => {
+  checks.push(await safeCheck('expert_labels_valid', 'Expert mask labels match BraTS 2021 convention (if provided)', 'Expert-mask alignment', async () => {
     if (!parsedVolumes?.refVolume) {
-      return { status: 'na', message: 'No expert segmentation provided', detail: null };
+      return { status: 'not_checked', message: 'Expert segmentation not provided — check not run', detail: null };
     }
     const unexpected = findUnexpectedLabels(parsedVolumes.refVolume, VALID_BRATS_LABELS);
     if (unexpected.length === 0) {
@@ -285,25 +311,34 @@ export async function runTrustLayer(sessionFiles, predictionData, parsedVolumes)
   // ------------------------------------------------------------------
   // CHECK 9: Prediction–expert spatial grid alignment (if expert provided)
   // ------------------------------------------------------------------
-  checks.push(await safeCheck('pred_expert_alignment', 'Prediction and expert mask grids are aligned', async () => {
+  checks.push(await safeCheck('pred_expert_alignment', 'Prediction and expert mask grids are aligned', 'Expert-mask alignment', async () => {
     if (!parsedVolumes?.predDims || !parsedVolumes?.refDims || !parsedVolumes?.refVolume) {
-      return { status: 'na', message: 'Expert segmentation not provided — alignment check skipped', detail: null };
+      return { status: 'not_checked', message: 'Expert segmentation not provided — alignment check skipped', detail: null };
     }
-    // Build minimal geometry objects for validateOverlayGeometry
-    const predGeo = { dims: parsedVolumes.predDims, pixDims: parsedVolumes.predAffine ? null : null };
-    const refGeo  = { dims: parsedVolumes.refDims,  pixDims: null };
+    // Build geometry objects with dims, pixDims, and affines for validateOverlayGeometry
+    const predGeo = {
+      dims: parsedVolumes.predDims,
+      pixDims: parsedVolumes.predPixDims ?? null,
+      affine: parsedVolumes.predAffine ?? null
+    };
+    const refGeo = {
+      dims: parsedVolumes.refDims,
+      pixDims: parsedVolumes.refPixDims ?? null,
+      affine: parsedVolumes.refAffine ?? null
+    };
     const r = validateOverlayGeometry(predGeo, refGeo);
     const isValid = Boolean(r.valid ?? r.compatible);
     if (isValid) {
-      return { status: 'pass', message: 'Prediction and expert grids are spatially aligned', detail: null };
+      const warnMsg = r.warning ? ` (${r.warning})` : '';
+      return { status: 'pass', message: `Prediction and expert grids are spatially aligned${warnMsg}`, detail: r.warning ?? null };
     }
     return { status: 'fail', message: 'Prediction–expert grid mismatch', detail: r.error ?? r.reason };
   }));
 
   // ------------------------------------------------------------------
-  // CHECK 10: Backend response integrity
+  // CHECK 10: Backend response integrity & inference status
   // ------------------------------------------------------------------
-  checks.push(await safeCheck('backend_response_valid', 'Backend response contains required fields', async () => {
+  checks.push(await safeCheck('backend_response_valid', 'Backend response integrity and inference status', 'Prediction validation', async () => {
     if (!predictionData) {
       return { status: 'na', message: 'No prediction response available (no inference run yet)', detail: null };
     }
@@ -319,7 +354,24 @@ export async function runTrustLayer(sessionFiles, predictionData, parsedVolumes)
     if (negatives.length > 0) {
       return { status: 'warn', message: `Negative volume values detected: ${negatives.join(', ')}`, detail: 'Volumes should be ≥ 0 mL.' };
     }
-    return { status: 'pass', message: 'Backend response is complete and internally consistent', detail: null };
+    const isLive = predictionData.isLiveInference === true;
+    const weightsPresent = predictionData.model_weights_present ?? predictionData.weights_present ?? null;
+
+    if (isLive && weightsPresent === false) {
+      return {
+        status: 'warn',
+        message: 'Live inference executed with UNTRAINED model weights (checkpoint missing)',
+        detail: 'Backend reported model_weights_present: false. Pretrained checkpoint model.pt is missing from backend/models/. Predictions are generated by a randomly initialized SegResNet architecture and cannot be used for clinical or scientific assessment.'
+      };
+    }
+
+    const msg = isLive
+      ? 'Backend response is complete and verified from live inference'
+      : 'Backend response is complete (candidate research prototype; live inference unverified)';
+    const detail = isLive
+      ? null
+      : 'Live inference server is currently offline or unverified. Displayed metrics are candidate research data.';
+    return { status: 'pass', message: msg, detail };
   }));
 
   return checks;

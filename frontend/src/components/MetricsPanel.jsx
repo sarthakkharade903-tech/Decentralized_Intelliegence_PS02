@@ -33,6 +33,7 @@ export default function MetricsPanel({
   predictionData = null,
   provenance = null,
   isSynthetic = false,
+  expertError = null,
 }) {
   // Resolve volumes: prefer computed (from NIfTI affine), fallback to backend response
   const vols = resolveVolumes(regionVolumes, predictionData);
@@ -87,13 +88,18 @@ export default function MetricsPanel({
           </div>
           {!hasMetrics && (
             <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-              Expert mask not uploaded
+              {expertError ? 'Spatial mismatch' : 'Expert mask not uploaded'}
             </span>
           )}
         </div>
 
         {hasMetrics ? (
           <MetricsTable metricsData={metricsData} hd95Data={hd95Data} />
+        ) : expertError ? (
+          <div className="py-6 px-4 text-center rounded-xl bg-rose-950/30 border border-rose-800/40 text-rose-300 text-xs font-mono space-y-1">
+            <p className="font-semibold">Expert Comparison Unavailable: Spatial Incompatibility</p>
+            <p className="text-slate-400 text-[11px]">{expertError}</p>
+          </div>
         ) : (
           <div className="py-6 text-center text-slate-500 text-sm font-mono">
             <p>Upload an expert segmentation to compute evaluation metrics.</p>
