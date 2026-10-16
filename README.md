@@ -1,10 +1,9 @@
-# NeuroScope-3D / NeuroVault: Brain MRI Tumor Segmentation & Multi-Planar Viewer
+# NeuroVault: Brain MRI Tumor Segmentation & 3D Interactive Platform
 
 [![Hackathon](https://img.shields.io/badge/Hackathon-Kurukshetra%2024h-blueviolet)](#)
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.x%20%7C%20CUDA-ee4c2c.svg)](https://pytorch.org/)
-[![MONAI](https://img.shields.io/badge/MONAI-Core%20Medical-darkgreen.svg)](https://monai.io/)
-[![Frontend](https://img.shields.io/badge/Frontend-React%2019%20%2B%20Vite%20%2B%20Tailwind%20v4-61dafb.svg)](https://vite.dev/)
+[![Three.js](https://img.shields.io/badge/3D%20Graphics-Three.js%20r183-black.svg)](https://threejs.org/)
+[![Frontend](https://img.shields.io/badge/Frontend-React%2019%20%2B%20Vite%208%20%2B%20Tailwind%20v4-61dafb.svg)](https://vite.dev/)
 [![License](https://img.shields.io/badge/License-MIT%20%2F%20Research%20Only-lightgrey)](#)
 
 > **Clinical Decision Support & Visualization Disclaimer**:
@@ -14,7 +13,7 @@
 
 ## 1. Problem Statement & Hackathon Context
 
-Developed for the **Kurukshetra Technical Inauguration & 24-Hour Hackathon**, **NeuroScope-3D (NeuroVault)** addresses the clinical challenge of segmenting and quantifying brain gliomas from multi-parametric magnetic resonance imaging (mpMRI).
+Developed for the **Kurukshetra Technical Inauguration & 24-Hour Hackathon**, **NeuroVault** addresses the clinical challenge of segmenting and quantifying brain gliomas from multi-parametric magnetic resonance imaging (mpMRI).
 
 Clinicians inspect four distinct MRI modalities to delineate distinct tumor compartments:
 - **T1-weighted (T1)**: General anatomical reference.
@@ -22,7 +21,7 @@ Clinicians inspect four distinct MRI modalities to delineate distinct tumor comp
 - **T2-weighted (T2)**: Delineates fluid and bulk lesion boundaries.
 - **Fluid Attenuated Inversion Recovery (FLAIR)**: Suppresses pure cerebrospinal fluid (CSF) signals to highlight peritumoral vasogenic edema.
 
-NeuroVault ingests these 4 co-registered NIfTI sequences, prepares them for automated 3D deep-learning segmentation via MONAI, recovers the original spatial affine geometry, calculates physical tumor volumes in millilitres, and presents an interactive multi-planar viewport.
+NeuroVault provides a cinematic, real-time 3D anatomical visualization of the brain, coupled with local NIfTI ingestion across all 4 sequences, preparing scans for automated 3D deep-learning segmentation via MONAI.
 
 ---
 
@@ -30,41 +29,48 @@ NeuroVault ingests these 4 co-registered NIfTI sequences, prepares them for auto
 
 | Component | Status | Details |
 | :--- | :--- | :--- |
-| **Landing Hero Page** | **Implemented & Verified** | Minimal obsidian aesthetic (`#06080D`), 3D anatomical brain visual with ambient floating & axial scanline laser sweep, typography, and privacy statements. |
-| **Sequence Upload Modal** | **Implemented & Verified** | Ingests 4 sequences (T1, T1Gd, T2, FLAIR). Supports `.nii` / `.nii.gz`, single or batch drop auto-assignment, file size display, and removal. |
-| **Local Privacy Guard** | **Active** | 100% browser-local handling. No cloud APIs, no external transmissions, zero data leakage. |
+| **Header** | **Implemented & Verified** | Minimal design with brain outline icon, `NeuroVault` wordmark, and singular active `Home` link with cyan glow. |
+| **Hero Copy & Typography** | **Implemented & Verified** | Bold *"Look deeper. See beyond."* headline, concise supporting copy, and 4 modality chips (`T1 Native`, `T1Gd Contrast`, `T2-Weighted`, `FLAIR Edema`). |
+| **Real-Time 3D Brain** | **Implemented & Verified** | Interactive Three.js anatomical human brain model (`brain.glb`) with cyan/teal rim lighting, warm amber accents, neural filaments, glowing synapse nodes, particle dust, and smooth pointer tracking. |
+| **Framed 3D Brain View** | **Implemented & Verified** | Scientific HUD frame with `3D BRAIN VIEW`, `1.0mm \| ISOTROPIC`, measurement scale ticks, `4 MRI SEQUENCES`, and `RESEARCH PREVIEW`. |
+| **4-Sequence Upload Panel** | **Implemented & Verified** | Glassmorphic panel with individual slots for T1, T1Gd, T2, and FLAIR. Strictly client-side `.nii` / `.nii.gz` validation, filename display, replace, and removal. |
+| **CTA Smooth-Scroll Interaction** | **Implemented & Verified** | Clicking *"Upload MRI Scan"* smoothly scrolls and highlights the upload panel. |
+| **Local Privacy Guarantee** | **Active** | 100% browser-local handling. No cloud APIs, zero patient data leakage. |
 | **Python Backend & MONAI** | **Planned (P1)** | FastAPI `/api/v1/segment/predict` with MONAI SegResNet 3D sliding window inference. |
-| **Discrete BraTS 2021 Mapping** | **Planned (P1)** | Multi-channel sigmoid to labels `0, 1, 2, 4` reconstruction. |
-| **Geometry Restoration** | **Planned (P1)** | Nearest-neighbor grid resampler to preserve original affine matrix and voxel spacing. |
-| **NiiVue Multi-Planar Viewer** | **Planned (P2)** | WebGL2 linked axial, coronal, sagittal viewports and 3D volume rendering. |
-| **Report Generation** | **Planned (P2)** | PDF/JSON clinical decision support summary export. |
 
 ---
 
-## 3. Running the Frontend
+## 3. 3D Model Provenance & Licensing
 
-The project is structured with a root proxy so you can run the frontend from either the workspace root or the `frontend/` directory.
+- **Asset Path**: `frontend/public/models/brain.glb`
+- **Origin**: Open-source 3D Brain Atlas (`itayinbarr/brainproject`)
+- **Underlying Sources**: Anatomically registered meshes derived from **Z-Anatomy contributors** and **BodyParts3D / DBCLS** (Database Center for Life Science, Japan).
+- **License**: **Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)**.
+- **Attribution**: Derived from the Z-Anatomy and BodyParts3D neuroanatomical open projects.
 
-### Quickstart (from project root)
+---
+
+## 4. Running the Application
+
+### Development Server
 ```bash
-# Start development server
+# From project root:
 npm run dev
 
-# Or build for production
+# Or from frontend/ directory:
+cd frontend
+npm run dev
+```
+Open **`http://localhost:5173/`** in your browser.
+
+### Production Build Verification
+```bash
 npm run build
 ```
 
-### Alternatively (from `frontend/` directory)
-```bash
-cd frontend
-npm install
-npm run dev
-```
-The Vite development server will start at `http://localhost:5173/`.
-
 ---
 
-## 4. Repository Structure
+## 5. Repository Structure
 
 ```text
 NeuroScope-3D/
@@ -80,27 +86,19 @@ NeuroScope-3D/
 │   ├── DECISIONS.md         # Architecture Decision Records (ADRs)
 │   ├── ONBOARDING.md        # Step-by-step setup guide for team members (Ayaz & Samir)
 │   └── TASK_BOARD.md        # Prioritized task backlog (P0 to P3)
-└── frontend/                # React 19 + Vite + Tailwind CSS UI
+└── frontend/                # React 19 + Vite 8 + Three.js + Tailwind CSS UI
+    ├── public/
+    │   └── models/          # Bundled 3D anatomical brain model (brain.glb)
     ├── src/
-    │   ├── assets/          # 3D brain visual asset (brain-hero.jpg)
+    │   ├── assets/          # Static fallback renders (brain-hero.jpg)
     │   ├── components/
-    │   │   ├── Navbar.jsx   # NeuroVault wordmark and minimal indicators
-    │   │   ├── Hero.jsx     # Editorial hero with animated 3D brain and CTA
-    │   │   └── UploadModal.jsx # 4-sequence NIfTI uploader with local validation
-    │   ├── App.jsx          # Main application container
-    │   ├── index.css        # Tailwind v4 import and atmospheric animations
-    │   └── main.jsx         # React application entry point
+    │   │   ├── Navbar.jsx   # Minimal header with brain icon and Home link
+    │   │   ├── Hero.jsx     # Two-column hero with framed 3D view and CTA
+    │   │   ├── Brain3D.jsx  # Real-time Three.js canvas with filaments & pointer parallax
+    │   │   └── UploadPanel.jsx # 4-sequence NIfTI selection panel with inline validation
+    │   ├── App.jsx          # Root container
+    │   ├── index.css        # Tailwind v4 import and custom effects
+    │   └── main.jsx         # Application entry
     ├── vite.config.js       # Vite configuration with @tailwindcss/vite
-    └── package.json         # Frontend dependencies (React 19, Lucide, Tailwind v4)
+    └── package.json         # Dependencies (three, lucide-react, react 19, tailwind v4)
 ```
-
----
-
-## 5. Team & Collaboration Workflow
-
-- **Team Members**: Project Owner (Sarthak), Ayaz, Samir.
-- **Workflow Rules**: See [docs/TEAM_WORKFLOW.md](file:///d:/Visual%20Studio%20Code/Medical%20Brain/docs/TEAM_WORKFLOW.md)
-  - All development occurs on dedicated feature branches (`feature/<name>-<topic>`).
-  - `main` branch is strictly stable and demo-ready.
-  - No direct pushes or force-pushes to `main`.
-- **Developer Onboarding**: See [docs/ONBOARDING.md](file:///d:/Visual%20Studio%20Code/Medical%20Brain/docs/ONBOARDING.md) for quickstart instructions.

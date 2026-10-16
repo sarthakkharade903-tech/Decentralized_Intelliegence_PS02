@@ -18,10 +18,13 @@ This backlog organizes the project into prioritized phases for the 24-hour sprin
 - [x] **Task 0.2**: Initialize Git repository and link to remote `sarthakkharade903-tech/NeuroScope-3D`.
 - [x] **Task 0.3**: Establish `.gitignore` to prevent leaks of NIfTI scans, weights, and secrets.
 - [x] **Task 0.4**: Establish comprehensive architecture, UI rules, team workflow, and onboarding documentation.
-- [x] **Task 0.5**: Bootstrap `frontend/` with Vite 8 + React 19 + Tailwind CSS v4 + Lucide React.
-- [x] **Task 0.6**: Build NeuroVault Landing Hero Page with 3D anatomical brain visual, scanline laser sweep, editorial typography, and local privacy statement.
-- [x] **Task 0.7**: Build 4-Sequence Upload Modal (T1, T1Gd, T2, FLAIR) with `.nii` / `.nii.gz` local browser validation, batch drop detection, and backend standby notices.
-- [ ] **Task 0.8**: Create Python 3.11 virtual environment (`.venv`) and define initial `backend/requirements.txt` with PyTorch, MONAI, and FastAPI.
+- [x] **Task 0.5**: Bootstrap `frontend/` with Vite 8 + React 19 + Tailwind CSS v4 + Three.js + Lucide React.
+- [x] **Task 0.6**: Build NeuroVault Header with brain icon, wordmark, and singular Home navigation.
+- [x] **Task 0.7**: Build Hero Section with "Look deeper. See beyond." typography, modality chips, and CTA.
+- [x] **Task 0.8**: Implement real-time 3D Anatomical Brain visualization in Three.js with cyan/teal rim lighting, neural filaments, synapse nodes, and mouse parallax.
+- [x] **Task 0.9**: Implement Framed 3D Brain View with scientific HUD metadata (`3D BRAIN VIEW`, `1.0mm | ISOTROPIC`, ruler ticks, `4 MRI SEQUENCES`).
+- [x] **Task 0.10**: Build integrated 4-Sequence Upload Panel (T1, T1Gd, T2, FLAIR) with `.nii` / `.nii.gz` client validation, replace, and remove.
+- [ ] **Task 0.11**: Create Python 3.11 virtual environment (`.venv`) and define initial `backend/requirements.txt` with PyTorch, MONAI, and FastAPI.
 
 ---
 
