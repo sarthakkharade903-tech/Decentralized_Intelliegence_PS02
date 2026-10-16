@@ -20,9 +20,9 @@ This document serves as the **single source of truth** for visual design, layout
 | Token | Hex | Usage |
 | :--- | :--- | :--- |
 | `surface-bg-obsidian` | `#06080D` | Root canvas background |
-| `surface-panel` | `#0D111A` / `#111827` | Primary card panels, sidebar, header |
-| `surface-panel-subtle` | `#161D2C` / `#1F2937` | Secondary cards, inactive tabs, input backgrounds |
-| `surface-border` | `rgba(30, 41, 59, 0.6)` | Subtle container borders and separators |
+| `surface-panel` | `#0D111A` / `#080D19` | Primary card panels, sidebar, header |
+| `surface-panel-subtle` | `#0A1120` / `#161D2C` | Upload sequence slots, secondary cards |
+| `surface-border` | `rgba(34, 211, 238, 0.25)` | Subtle cyan-accented container borders |
 
 ### Text & Accents
 | Token | Hex | Usage |
@@ -57,30 +57,34 @@ Color overlays must be uniform across all viewports:
 
 ---
 
-## 4. Landing Hero & Upload Interaction Guidelines
+## 4. Real-Time 3D Brain & Visualization Frame
 
-### Hero Presentation
-- The 3D anatomical brain rendering is the centerpiece visual.
-- Wrapped in a dark glass stage (`bg-slate-900/60`, `border-slate-800/80`) with ambient radial glow (`animate-pulse-glow`) and vertical MRI axial scanning slice simulation (`animate-scan-sweep`).
-- Clear distinction between real-world inputs (`RAS+`, `1.0mm isotropic`) and model tasks.
+### 3D Anatomical Brain Guidelines
+- Real anatomical human brain geometry (`brain.glb`) with verified provenance (Z-Anatomy / BodyParts3D CC BY-SA 4.0).
+- **Lighting Model**:
+  - Key front light: Surgical cool white (`#DCF8FF`, intensity 2.2).
+  - Rim lighting: Vivid cyan (`#00F0FF`, intensity 4.8) on back-left, vivid teal (`#00FFC4`, intensity 3.6) on back-right to accentuate sulcal fissures and outer silhouette.
+  - Accent light: Warm amber (`#FFDFBA`, intensity 1.2) for subtle tissue depth.
+- **Neural Filaments & Synapses**: Delicately connected spline lines (`0x22D3EE` / `0x14B8A6`) and glowing node spheres conforming to cortical contours.
+- **Particle Dust**: Sparse ambient particles drifting in a spherical aura.
+- **Interaction**: Pointer-tracking parallax with smooth lerp easing (`0.05`) and slow organic rotation (`0.0018` rad/frame).
+- **Fallback**: Immediate high-contrast static render if WebGL is unavailable.
 
-### Upload Modal Standards
-- Backdrop blur: `backdrop-blur-md bg-black/85`.
-- 4 explicit sequence slots: T1, T1Gd, T2, FLAIR.
-- Immediate client validation: Accepts only `.nii` and `.nii.gz`.
-- Local browser state: Files remain strictly in browser memory during this phase. No uploads to external clouds or third-party APIs.
-- Explicit standby state: Explains that segmentation becomes active when the local backend service (`/api/v1/segment/predict`) is running. No fake tumor predictions or fabricated metrics.
+### Scientific HUD Frame Specifications
+- Rounded corners (`rounded-2xl`), cyan border (`border-cyan-500/30`), dark glassmorphism (`bg-[#060A12]/70 backdrop-blur-md`).
+- Upper-left badge: `• 3D BRAIN VIEW` (pulsing cyan dot).
+- Upper-right indicator: `1.0mm | ISOTROPIC`.
+- Right border: Vertical ruler ticks for scale cues.
+- Bottom-left indicator: `4 MRI SEQUENCES (T1, T1Gd, T2, FLAIR)`.
+- Bottom-right badge: `• RESEARCH PREVIEW`.
 
 ---
 
-## 5. Multi-Planar Viewport Specifications (Planned for P2)
-- **Layout Grid**: 2x2 multi-planar grid or 3-pane linked slice layout:
-  - **Pane 1**: Axial view (Transverse slice)
-  - **Pane 2**: Coronal view (Frontal slice)
-  - **Pane 3**: Sagittal view (Lateral slice)
-  - **Pane 4**: 3D Volume Render or Interactive Histogram/Profile
-- **Interactions**:
-  - **Linked Crosshair**: Clicking on any voxel in one view automatically updates the other two views to the identical physical coordinate $(x, y, z)$.
-  - **Scroll Wheel**: Scrolls through slices along the active axis.
-  - **Window/Level (Brightness/Contrast)**: Right-click drag controls window width and level.
-  - **Overlay Toggle**: Individual checkboxes to toggle WT, TC, and ET visibility and adjust opacity.
+## 5. 4-Sequence Upload Panel Rules
+- Integrated below the hero content with slight layered overlap.
+- Glassmorphic container (`bg-[#080D19]/80 border-cyan-500/25 backdrop-blur-xl`).
+- 4 equal-width slots: **T1**, **T1Gd**, **T2**, **FLAIR**.
+- Immediate client validation: Accepts strictly `.nii` and compound `.nii.gz`.
+- Inline error messages for invalid formats.
+- Smooth replace (`Change`) and removal (`X`) controls.
+- Zero cloud transmission: files remain entirely in browser memory.

@@ -1,30 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
-import UploadModal from './components/UploadModal';
 
 export default function App() {
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
-
-  // Close modal on Escape key press
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        setIsUploadOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   return (
     <div className="min-h-screen bg-[#06080D] text-slate-100 flex flex-col selection:bg-cyan-500/30 selection:text-cyan-200">
       {/* Top Minimal Navigation */}
-      <Navbar onOpenUpload={() => setIsUploadOpen(true)} />
+      <Navbar />
 
-      {/* Main Hero Landing Experience */}
+      {/* Main Hero Landing Experience with Framed 3D Brain & Integrated Upload Panel */}
       <main className="flex-1 flex flex-col justify-center">
-        <Hero onOpenUpload={() => setIsUploadOpen(true)} />
+        <Hero />
       </main>
 
       {/* Minimal Editorial Footer */}
@@ -38,12 +24,6 @@ export default function App() {
           </div>
         </div>
       </footer>
-
-      {/* Sequence Ingestion Modal */}
-      <UploadModal
-        isOpen={isUploadOpen}
-        onClose={() => setIsUploadOpen(false)}
-      />
     </div>
   );
 }
