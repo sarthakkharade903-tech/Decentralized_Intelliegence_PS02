@@ -390,25 +390,27 @@ def run_segmentation_inference(
     # Cast back to fp32 for numerically stable sigmoid postprocessing
     cropped_logits = cropped_logits.float()
 
-    # ── 6. Restore prediction to original full-grid shape ────────────────────
-    # Ensures that volumetric voxel counts use the correct affine geometry.
-    full_shape = input_tensor.shape  # [1, 3_out_channels, H, W, D] → allocate on cpu
-    n_out = cropped_logits.shape[1]
-    output_logits = torch.zeros(
-        1, n_out,
-        full_shape[2], full_shape[3], full_shape[4],
-        dtype=torch.float32,
-        device="cpu",
-    )
-    output_logits[0, :, x0:x1, y0:y1, z0:z1] = cropped_logits[0].cpu()
-
-    # ── 7. Postprocess: sigmoid → threshold → discrete BraTS labels ──────────
-    output_np = output_logits.squeeze(0).numpy()  # [3, H, W, D] in canonical RAS+
-    discrete_mask_ras = map_nested_channels_to_discrete_labels(
-        output_np,
+    # ── 6. Postprocess cropped volume directly to discrete BraTS labels ──────
+    cropped_np = cropped_logits.squeeze(0).cpu().numpy()  # [3, c_H, c_W, c_D]
+    cropped_discrete = map_nested_channels_to_discrete_labels(
+        cropped_np,
         is_logits=True,
         threshold=threshold,
     )
+
+    # ── 7. Restore discrete labels to full MRI grid (zeros = Background) ──────
+    # Crucial: Background air outside bounding box is guaranteed 0 (never 0.0 logit
+    # which has sigmoid(0.0) == 0.5 >= threshold).
+    full_shape = input_tensor.shape
+    discrete_mask_ras = np.zeros(
+        (full_shape[2], full_shape[3], full_shape[4]),
+        dtype=np.uint8,
+    )
+    discrete_mask_ras[x0:x1, y0:y1, z0:z1] = cropped_discrete
+
+    # Mask out background air where all MRI modalities are near zero
+    brain_tissue_mask = (input_tensor[0].abs().sum(dim=0).cpu().numpy() > 1e-4)
+    discrete_mask_ras = discrete_mask_ras * brain_tissue_mask.astype(np.uint8)
 
     # Re-invert to patient's native orientation & grid so output matches input exactly
     if from_ras is not None:
