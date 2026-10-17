@@ -75,9 +75,13 @@ def map_nested_channels_to_discrete_labels(
     wt_prob = probs[1]  # Channel 1: Whole Tumor
     et_prob = probs[2]  # Channel 2: Enhancing Tumor
 
-    is_et = et_prob >= threshold
-    is_tc = tc_prob >= threshold
+    # Enforce BraTS topological nesting constraint:
+    # Enhancing Tumor (ET) is strictly a subset of Tumor Core (TC),
+    # which is strictly a subset of Whole Tumor (WT).
+    # This prevents spurious out-of-brain false-positive islands.
     is_wt = wt_prob >= threshold
+    is_tc = (tc_prob >= threshold) & is_wt
+    is_et = (et_prob >= threshold) & is_tc
 
     # Step 3: Priority mapping matching configs/inference.json Lambdad transform:
     # lambda x: torch.where(x[2] > 0, 4, torch.where(x[0] > 0, 1, torch.where(x[1] > 0, 2, 0)))

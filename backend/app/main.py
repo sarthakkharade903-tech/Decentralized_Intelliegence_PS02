@@ -270,6 +270,7 @@ async def predict_segmentation(
         "original_geometry": inference_result.original_geometry.to_dict(),
         "volumes_ml": vol_dict["volumes_ml"],
         "metrics": vol_dict["metrics"],
+        "warnings": validation_result.warnings,
         "model_provenance": {
             "architecture": "MONAI SegResNet (BraTS 2018/2021)",
             "weights_md5": OFFICIAL_WEIGHTS_MD5,

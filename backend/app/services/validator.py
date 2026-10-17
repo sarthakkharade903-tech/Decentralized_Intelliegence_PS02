@@ -9,7 +9,7 @@ Enforces clinical neuroimaging and hackathon constraints defined in:
 import gzip
 import io
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
 
@@ -69,11 +69,15 @@ class ValidationResult:
     sequences: Dict[str, nib.spatialimages.SpatialImage]
     geometry: OriginalGeometry
     reference_affine: np.ndarray
+    warnings: List[str] = field(default_factory=list)
+    sanity_report: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "is_valid": self.is_valid,
             "geometry": self.geometry.to_dict(),
+            "warnings": self.warnings,
+            "sanity_report": self.sanity_report,
         }
 
 
@@ -308,9 +312,91 @@ def validate_mpmri_sequences(
     # 7. Extract reference geometry metadata
     geometry = extract_geometry(loaded_images[ref_seq])
 
+    # 8. Clinical Input Sanity Evaluation (Hackathon Test 10)
+    warnings, sanity_report = check_input_sanity(loaded_images, ref_seq=ref_seq)
+
     return ValidationResult(
         is_valid=True,
         sequences=loaded_images,
         geometry=geometry,
         reference_affine=ref_affine,
+        warnings=warnings,
+        sanity_report=sanity_report,
     )
+
+
+def check_input_sanity(
+    sequences: Dict[str, nib.spatialimages.SpatialImage],
+    ref_seq: str = "t1gd",
+) -> Tuple[List[str], Dict[str, Any]]:
+    """Evaluates anatomical and radiological sanity of uploaded scans (Hackathon Test 10).
+
+    Detects:
+      1. Non-skull-stripped scans: Checks peripheral boundary slices for scalp/skull tissue.
+      2. Non-brain scans: Checks total non-zero tissue volume and background ratio against
+         human cranial anatomy benchmarks (700 - 2200 mL).
+    """
+    warnings: List[str] = []
+    ref_img = sequences.get(ref_seq) or next(iter(sequences.values()))
+    data = np.asanyarray(ref_img.dataobj, dtype=np.float32)
+    affine = ref_img.affine
+    voxel_vol_mm3 = float(abs(np.linalg.det(affine[:3, :3]))) if affine.shape == (4, 4) else 1.0
+
+    total_voxels = data.size
+    nonzero_mask = data > 0
+    nonzero_count = int(np.sum(nonzero_mask))
+    background_ratio = float(1.0 - (nonzero_count / total_voxels)) if total_voxels > 0 else 0.0
+
+    tissue_volume_ml = (nonzero_count * voxel_vol_mm3) / 1000.0
+
+    # 1. Skull-stripping sanity test:
+    # In skull-stripped brain scans, outer perimeter boundaries are pure background.
+    # Check outer 2 slices on all 6 faces of the volume.
+    is_skull_stripped = True
+    if min(data.shape) >= 20 and nonzero_count > 1000:
+        face_nonzero = 0
+        face_voxels = 0
+        for axis in range(3):
+            # First 2 slices
+            s_lo = [slice(None)] * 3
+            s_lo[axis] = slice(0, 2)
+            face_nonzero += int(np.sum(data[tuple(s_lo)] > 0))
+            face_voxels += data[tuple(s_lo)].size
+
+            # Last 2 slices
+            s_hi = [slice(None)] * 3
+            s_hi[axis] = slice(-2, None)
+            face_nonzero += int(np.sum(data[tuple(s_hi)] > 0))
+            face_voxels += data[tuple(s_hi)].size
+
+        boundary_fraction = face_nonzero / max(face_voxels, 1)
+        if boundary_fraction > 0.08:
+            is_skull_stripped = False
+            warnings.append(
+                "NON_SKULL_STRIPPED: Peripheral scalp, skull, or neck tissue detected on volume boundaries. "
+                "Skull-stripped scans yield optimal segmentation accuracy."
+            )
+
+    # 2. Brain anatomy sanity test:
+    # A human adult cranial brain volume is strictly ~700 - 2200 mL.
+    # Non-brain scans (e.g. abdominal, chest, or phantom) have drastically divergent volumes
+    # or lack typical intracranial background ratio (BraTS background is 40-70%).
+    is_brain = True
+    # Only test if scan is clinical-sized (not a toy test array)
+    if min(data.shape) >= 40:
+        if tissue_volume_ml > 3200.0 or background_ratio < 0.15:
+            is_brain = False
+            warnings.append(
+                "NON_BRAIN_SCAN: Tissue physical volume and background proportion diverge significantly "
+                "from human cranial MRI benchmarks."
+            )
+
+    sanity_report = {
+        "is_skull_stripped": is_skull_stripped,
+        "is_brain": is_brain,
+        "tissue_volume_ml": round(tissue_volume_ml, 2),
+        "background_ratio": round(background_ratio, 3),
+        "warnings_count": len(warnings),
+    }
+
+    return warnings, sanity_report

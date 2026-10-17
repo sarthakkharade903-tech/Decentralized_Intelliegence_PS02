@@ -89,3 +89,25 @@ def test_invalid_mask_dimensions_rejected():
     mask_2d = np.zeros((10, 10), dtype=np.uint8)
     with pytest.raises(ValueError):
         compute_tumor_volumetrics(mask_2d, voxel_spacing_mm=[1.0, 1.0, 1.0])
+
+
+def test_hackathon_rubric_volume_cube():
+    """Verify Kurukshetra Hackathon Rubric Test 2:
+    Case whose expert mask is a 20 x 20 x 20-voxel cube labelled 2, at spacing 1 x 1 x 2 mm.
+    Criteria: Expert-mask volumes read WT 16.0 mL (+-1%), TC 0, and ET 0.
+    """
+    # 20 x 20 x 20 cube = 8000 voxels of Label 2 (ED)
+    mask = np.zeros((30, 30, 30), dtype=np.uint8)
+    mask[5:25, 5:25, 5:25] = 2
+
+    # Spacing 1 x 1 x 2 mm -> 1 voxel = 2 mm³ = 0.002 mL
+    # 8000 * 0.002 = 16.00 mL
+    report = compute_tumor_volumetrics(mask, voxel_spacing_mm=[1.0, 1.0, 2.0])
+
+    assert abs(report.volumes_ml.whole_tumor - 16.0) < 0.16  # within 1%
+    assert report.volumes_ml.tumor_core == 0.0
+    assert report.volumes_ml.enhancing_tumor == 0.0
+    assert report.volumes_ml.edema == 16.0
+    assert report.voxel_counts.wt_voxels == 8000
+    assert report.voxel_counts.tc_voxels == 0
+    assert report.voxel_counts.et_voxels == 0

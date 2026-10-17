@@ -206,12 +206,22 @@ def prime_model_singleton(
 def preprocess_multimodal_tensor(
     sequences: Dict[str, nib.spatialimages.SpatialImage],
     modality_order: List[str] = INPUT_MODALITY_ORDER,
-) -> Tuple[torch.Tensor, OriginalGeometry, np.ndarray]:
+    return_inverse_ornt: bool = False,
+) -> Union[
+    Tuple[torch.Tensor, OriginalGeometry, np.ndarray],
+    Tuple[torch.Tensor, OriginalGeometry, np.ndarray, Optional[np.ndarray]],
+]:
     """Stacks and normalizes the 4 MRI modalities in the verified input order.
 
     Order: [t1gd, t1, t2, flair]
-    Normalization: Z-score normalization on non-zero voxels for each sequence.
+    Orientation Harmonization: Automatically maps arbitrary spatial orientations
+    (LPS, LAS, flipped affines) to canonical RAS+ space so SegResNet features
+    match BraTS training orientation.
+    Intensity Normalization: Z-score normalization with [0.5, 99.5] percentile
+    clipping on non-zero brain tissue.
     """
+    import nibabel.orientations as nbo
+
     channel_arrays: List[np.ndarray] = []
     reference_affine: Optional[np.ndarray] = None
     ref_img = None
@@ -229,10 +239,27 @@ def preprocess_multimodal_tensor(
             ref_img = img
 
         data = np.asanyarray(img.dataobj, dtype=np.float32)
+        channel_arrays.append(data)
 
-        # Non-zero intensity normalization per modality channel
+    # 1. Coordinate orientation harmonization: Map to canonical RAS+
+    orig_ornt = nbo.io_orientation(reference_affine)
+    ras_ornt = nbo.axcodes2ornt(('R', 'A', 'S'))
+    needs_reorientation = not np.array_equal(orig_ornt, ras_ornt)
+    to_ras = nbo.ornt_transform(orig_ornt, ras_ornt) if needs_reorientation else None
+    from_ras = nbo.ornt_transform(ras_ornt, orig_ornt) if needs_reorientation else None
+
+    # Apply reorientation and robust percentile z-score normalization
+    normalized_channels: List[np.ndarray] = []
+    for data in channel_arrays:
+        if needs_reorientation:
+            data = nbo.apply_orientation(data, to_ras)
+
         mask = data > 0
         if np.any(mask):
+            v = data[mask]
+            lower = np.percentile(v, 0.5)
+            upper = np.percentile(v, 99.5)
+            data[mask] = np.clip(data[mask], lower, upper)
             mean = float(np.mean(data[mask]))
             std = float(np.std(data[mask]))
             if std > 1e-7:
@@ -240,10 +267,10 @@ def preprocess_multimodal_tensor(
             else:
                 data[mask] = 0.0
 
-        channel_arrays.append(data)
+        normalized_channels.append(data)
 
     # Stack channels along channel dimension: [4, H, W, D]
-    stacked = np.stack(channel_arrays, axis=0)
+    stacked = np.stack(normalized_channels, axis=0)
     # Add batch dimension: [1, 4, H, W, D]
     tensor = torch.from_numpy(stacked).unsqueeze(0)
 
@@ -260,6 +287,8 @@ def preprocess_multimodal_tensor(
         orientation=orientation,
     )
 
+    if return_inverse_ornt:
+        return tensor, geometry, reference_affine, from_ras
     return tensor, geometry, reference_affine
 
 
@@ -297,7 +326,9 @@ def run_segmentation_inference(
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ── 2. Preprocess & stack input in verified order: [t1gd, t1, t2, flair] ─
-    input_tensor, geometry, ref_affine = preprocess_multimodal_tensor(sequences)
+    input_tensor, geometry, ref_affine, from_ras = preprocess_multimodal_tensor(
+        sequences, return_inverse_ornt=True
+    )
     input_tensor = input_tensor.to(device, non_blocking=True)   # shape: [1, 4, H, W, D]
 
     # ── 3. Resolve model (singleton if warmed up, else cold-build) ────────────
@@ -372,12 +403,19 @@ def run_segmentation_inference(
     output_logits[0, :, x0:x1, y0:y1, z0:z1] = cropped_logits[0].cpu()
 
     # ── 7. Postprocess: sigmoid → threshold → discrete BraTS labels ──────────
-    output_np = output_logits.squeeze(0).numpy()  # [3, H, W, D]
-    discrete_mask = map_nested_channels_to_discrete_labels(
+    output_np = output_logits.squeeze(0).numpy()  # [3, H, W, D] in canonical RAS+
+    discrete_mask_ras = map_nested_channels_to_discrete_labels(
         output_np,
         is_logits=True,
         threshold=threshold,
     )
+
+    # Re-invert to patient's native orientation & grid so output matches input exactly
+    if from_ras is not None:
+        import nibabel.orientations as nbo
+        discrete_mask = nbo.apply_orientation(discrete_mask_ras, from_ras)
+    else:
+        discrete_mask = discrete_mask_ras
 
     # ── 8. Physical volumetrics using original voxel spacing ─────────────────
     volumetrics = compute_tumor_volumetrics(

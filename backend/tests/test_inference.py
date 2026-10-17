@@ -130,3 +130,68 @@ def test_md5_checksum_verification():
             temp_path.unlink()
         except OSError:
             pass
+
+
+def test_orientation_harmonization_and_inversion_roundtrip():
+    """Verify Hackathon Rubric Tests 4 & 5 (Orientation Invariance):
+    When inputs have non-canonical or flipped affines (e.g. LPS or left-right flipped),
+    preprocessing reorients to canonical RAS+ for neural inference, and postprocessing
+    inverts the discrete mask back to the exact native grid and affine matrix.
+    """
+    # Create volume with Left-Right flipped affine (LPS orientation)
+    lps_affine = np.diag([-1.0, -1.0, 1.0, 1.0])
+    rng = np.random.default_rng(seed=42)
+    data = rng.uniform(20.0, 400.0, size=(16, 16, 16)).astype(np.float32)
+
+    seqs = {
+        "t1": nib.Nifti1Image(data, lps_affine),
+        "t1gd": nib.Nifti1Image(data, lps_affine),
+        "t2": nib.Nifti1Image(data, lps_affine),
+        "flair": nib.Nifti1Image(data, lps_affine),
+    }
+
+    # Verify preprocessing reorients and provides inverse transform
+    tensor, geometry, affine, from_ras = preprocess_multimodal_tensor(seqs, return_inverse_ornt=True)
+    assert from_ras is not None
+    assert tensor.shape == (1, 4, 16, 16, 16)
+
+    # Run inference and confirm mask is inverted to match original native affine and shape
+    device = torch.device("cpu")
+    result = run_segmentation_inference(
+        sequences=seqs,
+        weights_path=None,
+        device=device,
+        roi_size=(16, 16, 16),
+        sw_batch_size=1,
+    )
+    assert result.discrete_mask.shape == (16, 16, 16)
+    assert np.allclose(result.reference_affine, lps_affine)
+
+
+def test_hackathon_reproducibility_deterministic_inference():
+    """Verify Hackathon Rubric Test 8 (Reproducibility):
+    Running the same case twice must yield masks that agree with Dice >= 0.99.
+    """
+    seqs = create_synthetic_sequence_set(shape=(16, 16, 16))
+    device = torch.device("cpu")
+
+    res1 = run_segmentation_inference(
+        sequences=seqs,
+        weights_path=None,
+        device=device,
+        roi_size=(16, 16, 16),
+        sw_batch_size=1,
+    )
+    res2 = run_segmentation_inference(
+        sequences=seqs,
+        weights_path=None,
+        device=device,
+        roi_size=(16, 16, 16),
+        sw_batch_size=1,
+    )
+
+    m1 = res1.discrete_mask
+    m2 = res2.discrete_mask
+
+    # Both runs on same input must match identically (Dice = 1.000 >= 0.99)
+    assert np.array_equal(m1, m2)

@@ -94,3 +94,31 @@ def test_invalid_channel_shape_rejected():
 
     with pytest.raises(ValueError):
         map_nested_channels_to_discrete_labels(np.zeros((8, 8, 8)), is_logits=False)
+
+
+def test_topological_containment_nesting():
+    """Verify that spurious ET or TC activations outside of WT are suppressed to 0 (Background).
+
+    BraTS ground-truth invariant: ET <= TC <= WT.
+    """
+    probs = np.zeros((3, 2, 2, 2), dtype=np.float32)
+
+    # Pixel (0, 0, 0): ET is 0.9, TC is 0.9, but WT is only 0.2 (below threshold 0.5)
+    # Under topological containment, this cannot be an isolated tumor outside WT
+    probs[0, 0, 0, 0] = 0.9  # TC
+    probs[1, 0, 0, 0] = 0.2  # WT (inactive)
+    probs[2, 0, 0, 0] = 0.9  # ET
+
+    # Pixel (1, 1, 1): ET is 0.85, but TC is only 0.1 and WT is 0.95
+    # Enhancing tumor cannot exist without tumor core
+    probs[0, 1, 1, 1] = 0.1  # TC (inactive)
+    probs[1, 1, 1, 1] = 0.95 # WT (active)
+    probs[2, 1, 1, 1] = 0.85 # ET
+
+    discrete = map_nested_channels_to_discrete_labels(probs, is_logits=False, threshold=0.5)
+
+    # (0, 0, 0) must be suppressed to 0 (Background) because WT is not active
+    assert discrete[0, 0, 0] == 0
+
+    # (1, 1, 1) must fall back to Label 2 (ED) because WT is active, but TC is not
+    assert discrete[1, 1, 1] == 2

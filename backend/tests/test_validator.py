@@ -303,3 +303,21 @@ def test_geometry_extraction_accuracy():
         "voxel_spacing_mm": [0.9375, 0.9375, 3.0],
         "orientation": "RAS",
     }
+
+
+def test_hackathon_input_sanity_warning():
+    """Verify Hackathon Rubric Test 10:
+    Upload a scan that is not skull-stripped (peripheral tissue on volume boundaries)
+    -> returns a clear warning in validation results.
+    """
+    shape = (24, 24, 24)
+    rng = np.random.default_rng(seed=42)
+    data = rng.uniform(20.0, 400.0, size=shape).astype(np.float32)  # boundary slices are completely filled
+    affine = np.eye(4)
+    img = nib.Nifti1Image(data, affine)
+    seqs = {"t1": img, "t1gd": img, "t2": img, "flair": img}
+
+    result = validate_mpmri_sequences(seqs)
+    assert len(result.warnings) > 0
+    assert any("NON_SKULL_STRIPPED" in w for w in result.warnings)
+    assert result.sanity_report["is_skull_stripped"] is False
