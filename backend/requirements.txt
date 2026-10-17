@@ -23,9 +23,11 @@ pytest-asyncio>=0.23.0
 httpx>=0.27.0
 
 # --- Deep Learning: PyTorch & MONAI ---
-# Default to official CPU index for local host without CUDA overhead
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.14.1+cpu
+# CUDA 12.1 build — targets NVIDIA RTX 3050 Laptop GPU (6 GB VRAM, CUDA 13.1 driver)
+# Install with: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch>=2.2.0
+torchvision
 monai==1.4.0
 
 # --- Utilities & Clinical Reporting ---

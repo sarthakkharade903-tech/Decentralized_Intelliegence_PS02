@@ -101,8 +101,14 @@ def test_health_check_endpoints():
         payload = response.json()
         assert payload["status"] == "healthy"
         assert payload["service"] == "NeuroScope-3D API"
-        assert "hardware_device" in payload
-        assert "model_weights_present" in payload
+        # Hardware block reports GPU/CPU availability and singleton state
+        assert "hardware" in payload
+        assert "cuda_available" in payload["hardware"]
+        assert "model_singleton_loaded" in payload["hardware"]
+        # Model provenance block exposes official BraTS Dice metrics
+        assert "model_provenance" in payload
+        assert "official_validation_metrics" in payload["model_provenance"]
+        assert "whole_tumor_dice" in payload["model_provenance"]["official_validation_metrics"]
         assert "disclaimer" in payload
 
 
