@@ -15,29 +15,6 @@ export const API_BASE_URL =
 
 export const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GiB challenge guardrail
 
-// Backward compatibility aliases
-export const BASE_URL = API_BASE_URL;
-export const MAX_FILE_BYTES = MAX_FILE_SIZE_BYTES;
-
-/**
- * Structured API error thrown by this client.
- * Check `error.code` or `error.errorCode` for programmatic handling in UI components.
- */
-export class ApiError extends Error {
-  /**
-   * @param {string} code        Machine-readable error code
-   * @param {string} message     Human-readable description for display
-   * @param {object} [detail={}] Optional structured detail from the backend
-   */
-  constructor(code, message, detail = {}) {
-    super(message);
-    this.name = 'ApiError';
-    this.code = code;
-    this.errorCode = code;
-    this.detail = detail;
-  }
-}
-
 /**
  * Validates a NIfTI file's extension and size on the client before dispatch.
  * Note: Server-side validation is authoritative for volume geometry, affines, and tensor shapes.
@@ -77,34 +54,43 @@ export function validateNiftiFile(file) {
 }
 
 /**
- * Suggests a sequence modality based on filename conventions.
- * Never silently assumes correctness if ambiguous.
+ * Validates that an API response contains a complete, well-formed segmentation payload.
+ * Prevents malformed or partial output from being mistaken for a valid prediction.
  *
- * @param {string} filename
- * @returns {{ slotId: string|null, confidence: 'high'|'ambiguous'|'none', reason?: string }}
+ * @param {any} data
+ * @returns {{ valid: boolean, error?: string }}
  */
-export function suggestSequenceFromFilename(filename) {
-  if (!filename) return { slotId: null, confidence: 'none' };
-  const lower = filename.toLowerCase();
-
-  // Explicit Post-contrast / Gadolinium
-  if (lower.includes('t1ce') || lower.includes('t1gd') || lower.includes('t1_ce') || lower.includes('t1-ce') || lower.includes('t1_gd') || lower.includes('t1-gd')) {
-    return { slotId: 't1gd', confidence: 'high', reason: 'Detected contrast keyword (t1ce/t1gd)' };
-  }
-  // FLAIR
-  if (lower.includes('flair')) {
-    return { slotId: 'flair', confidence: 'high', reason: 'Detected FLAIR keyword' };
-  }
-  // T2 (ensure not t1 or t1ce)
-  if (lower.includes('t2') && !lower.includes('t1')) {
-    return { slotId: 't2', confidence: 'high', reason: 'Detected T2 keyword' };
-  }
-  // T1 Native (ensure not t1ce or t1gd)
-  if (lower.includes('t1') && !lower.includes('ce') && !lower.includes('gd')) {
-    return { slotId: 't1', confidence: 'high', reason: 'Detected T1 keyword' };
+export function validatePredictionResponse(data) {
+  if (!data || typeof data !== 'object') {
+    return { valid: false, error: 'Server returned empty or non-JSON response.' };
   }
 
-  return { slotId: null, confidence: 'ambiguous', reason: 'Filename does not unambiguously indicate an MRI modality' };
+  // Check if payload declares an error state despite HTTP 200
+  if (data.status === 'error' || data.error) {
+    return {
+      valid: false,
+      error: data.message || (typeof data.error === 'string' ? data.error : 'Segmentation processing failed on backend.')
+    };
+  }
+
+  // Enforce existence of physical volume metrics
+  if (!data.volumes_ml || typeof data.volumes_ml !== 'object') {
+    return {
+      valid: false,
+      error: 'Malformed API response: missing required "volumes_ml" quantification from backend.'
+    };
+  }
+
+  // Enforce existence of core BraTS evaluation regions (WT, TC, ET)
+  const { whole_tumor, tumor_core, enhancing_tumor } = data.volumes_ml;
+  if (whole_tumor == null || tumor_core == null || enhancing_tumor == null) {
+    return {
+      valid: false,
+      error: 'Malformed API response: incomplete volume metrics (missing WT, TC, or ET volume values).'
+    };
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -129,103 +115,6 @@ export async function checkBackendHealth(signal) {
 }
 
 /**
- * Authoritative backend validation for 4 co-registered NIfTI scans without running AI inference.
- *
- * @param {Object} params
- * @param {File} params.t1
- * @param {File} params.t1gd
- * @param {File} params.t2
- * @param {File} params.flair
- * @param {string} [params.patientId]
- * @param {AbortSignal} [params.signal]
- * @returns {Promise<Object>}
- */
-export async function validateMriDataset({
-  t1,
-  t1gd,
-  t2,
-  flair,
-  patientId = 'ANONYMOUS',
-  signal = null
-}) {
-  const sequenceEntries = [
-    { key: 't1', name: 'T1 Native', file: t1 },
-    { key: 't1gd', name: 'T1ce / T1Gd', file: t1gd },
-    { key: 't2', name: 'T2-Weighted', file: t2 },
-    { key: 'flair', name: 'FLAIR', file: flair }
-  ];
-
-  for (const seq of sequenceEntries) {
-    if (!seq.file) {
-      throw new ApiError('MISSING_SEQUENCE', `Missing required sequence: ${seq.name}.`, { missing: seq.key });
-    }
-    const val = validateNiftiFile(seq.file);
-    if (!val.valid) {
-      throw new ApiError('INVALID_FILE', `${seq.name}: ${val.error}`, { sequence: seq.key });
-    }
-  }
-
-  for (let i = 0; i < sequenceEntries.length; i++) {
-    for (let j = i + 1; j < sequenceEntries.length; j++) {
-      if (
-        sequenceEntries[i].file.name === sequenceEntries[j].file.name &&
-        sequenceEntries[i].file.size === sequenceEntries[j].file.size
-      ) {
-        throw new ApiError(
-          'DUPLICATE_SEQUENCE_ASSIGNMENT',
-          `Duplicate file detected: "${sequenceEntries[i].file.name}" is assigned to both ${sequenceEntries[i].name} and ${sequenceEntries[j].name}. Each slot requires a distinct MRI modality.`
-        );
-      }
-    }
-  }
-
-  const formData = new FormData();
-  formData.append('t1', t1, t1.name || 't1.nii.gz');
-  formData.append('t1gd', t1gd, t1gd.name || 't1gd.nii.gz');
-  formData.append('t2', t2, t2.name || 't2.nii.gz');
-  formData.append('flair', flair, flair.name || 'flair.nii.gz');
-  formData.append('patient_id', patientId);
-
-  const endpoint = `${API_BASE_URL}/api/v1/segment/validate`;
-
-  let response;
-  try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      body: formData,
-      signal
-    });
-  } catch (netErr) {
-    if (netErr.name === 'AbortError') throw netErr;
-    throw new ApiError(
-      'BACKEND_UNAVAILABLE',
-      `Unable to connect to backend at "${API_BASE_URL || window.location.origin}". Ensure the FastAPI server is running on port 8000.`
-    );
-  }
-
-  let data = null;
-  try {
-    data = await response.json();
-  } catch {
-    // Non-JSON response
-  }
-
-  if (response.ok && data) {
-    return data;
-  }
-
-  const errorCode = data?.error || `HTTP_${response.status}`;
-  let message = data?.message || 'Dataset validation failed.';
-  if (response.status === 413) {
-    message = 'File exceeds the 1 GiB size limit.';
-  } else if (!data?.message && typeof data?.detail === 'string') {
-    message = data.detail;
-  }
-
-  throw new ApiError(errorCode, message, data?.detail || {});
-}
-
-/**
  * Submits the four required co-registered MRI sequences (+ optional expert ground truth mask)
  * to Member 2's FastAPI MONAI sliding window segmentation endpoint.
  *
@@ -246,8 +135,7 @@ export async function predictSegmentation({
   t2,
   flair,
   expertSeg = null,
-  patientId = 'ANONYMOUS',
-  patient_id = null,
+  patientId = 'BraTS2021_PATIENT_CASE',
   onProgress = null,
   signal = null
 }) {
@@ -292,17 +180,19 @@ export async function predictSegmentation({
   }
 
   // 2. Build Multipart FormData according to docs/ARCHITECTURE.md contract
+  // Browser automatically generates the multipart boundary; do not override Content-Type header.
   const formData = new FormData();
-  formData.append('t1', t1, t1.name || 't1.nii.gz');
-  formData.append('t1gd', t1gd, t1gd.name || 't1gd.nii.gz');
-  formData.append('t2', t2, t2.name || 't2.nii.gz');
-  formData.append('flair', flair, flair.name || 'flair.nii.gz');
+  formData.append('t1', t1, t1.name);
+  formData.append('t1gd', t1gd, t1gd.name);
+  formData.append('t2', t2, t2.name);
+  formData.append('flair', flair, flair.name);
 
   if (expertSeg) {
-    formData.append('expert_seg', expertSeg, expertSeg.name || 'expert_seg.nii.gz');
+    formData.append('expert_seg', expertSeg, expertSeg.name);
   }
-  const effectivePatientId = patient_id || patientId || 'ANONYMOUS';
-  formData.append('patient_id', effectivePatientId);
+  if (patientId) {
+    formData.append('patient_id', patientId);
+  }
 
   // 3. Dispatch Request via XMLHttpRequest for real upload progress events
   return new Promise((resolve, reject) => {
@@ -339,23 +229,27 @@ export async function predictSegmentation({
       }
 
       if (xhr.status >= 200 && xhr.status < 300) {
-        if (data) {
-          resolve(data);
-        } else {
-          const err = new ApiError('EMPTY_RESPONSE', 'Server returned empty or non-JSON response.');
+        const check = validatePredictionResponse(data);
+        if (!check.valid) {
+          const err = new Error(check.error);
           err.status = xhr.status;
+          err.detail = data?.detail || data || null;
+          err.errorCode = data?.error || null;
           reject(err);
+          return;
         }
+
+        resolve(data);
       } else {
         // Structured error extraction
         let errorMessage = 'Inference request failed.';
-        const errorCode = data?.error || (xhr.status === 404 ? 'NOT_FOUND' : 'API_ERROR');
 
         if (data?.message) {
           errorMessage = data.message;
         } else if (typeof data?.detail === 'string') {
           errorMessage = data.detail;
         } else if (Array.isArray(data?.detail)) {
+          // FastAPI Pydantic validation error array
           errorMessage = data.detail
             .map((d) => (d.msg ? `${d.loc?.join('.') || 'field'}: ${d.msg}` : JSON.stringify(d)))
             .join('; ');
@@ -371,15 +265,16 @@ export async function predictSegmentation({
           errorMessage = `Server returned HTTP ${xhr.status} (${xhr.statusText || 'Error'}).`;
         }
 
-        const err = new ApiError(errorCode, errorMessage, data?.detail || {});
+        const err = new Error(errorMessage);
         err.status = xhr.status;
+        err.detail = data?.detail || null;
+        err.errorCode = data?.error || null;
         reject(err);
       }
     };
 
     xhr.onerror = () => {
-      const err = new ApiError(
-        'BACKEND_UNAVAILABLE',
+      const err = new Error(
         `Unable to connect to backend at "${API_BASE_URL || window.location.origin}". Ensure the FastAPI server is running on port 8000.`
       );
       err.status = 0;
@@ -387,7 +282,7 @@ export async function predictSegmentation({
     };
 
     xhr.ontimeout = () => {
-      const err = new ApiError('REQUEST_TIMEOUT', 'Request timed out. 3D sliding window inference exceeded the 300-second limit.');
+      const err = new Error('Request timed out. 3D sliding window inference exceeded the 300-second limit.');
       err.status = 408;
       reject(err);
     };

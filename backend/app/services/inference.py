@@ -30,12 +30,7 @@ import torch
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import SegResNet
 
-from backend.app.exceptions import (
-    ModelNotReadyException,
-    ModelWeightsIncompatibleException,
-    NeuroScopeException,
-    ValidationException,
-)
+from backend.app.exceptions import NeuroScopeException, ValidationException
 from backend.app.services.postprocessing import map_nested_channels_to_discrete_labels
 from backend.app.services.validator import OriginalGeometry, ValidationResult
 from backend.app.services.volumetrics import VolumetricReport, compute_tumor_volumetrics
@@ -54,12 +49,6 @@ DEFAULT_WEIGHTS_PATH: Path = DEFAULT_WEIGHTS_DIR / "model.pt"
 # Strict input channel order required by the trained SegResNet
 INPUT_MODALITY_ORDER: List[str] = ["t1gd", "t1", "t2", "flair"]
 
-# Cached singleton state for verified inference model
-_CACHED_MODEL: Optional[torch.nn.Module] = None
-_CACHED_DEVICE: Optional[torch.device] = None
-_CACHED_WEIGHTS_PATH: Optional[Path] = None
-_CACHED_SHA256: Optional[str] = None
-
 
 # ─── Data Models ──────────────────────────────────────────────────────────────
 
@@ -72,11 +61,10 @@ class InferenceResult:
     execution_time_seconds: float
     hardware_device: str
     reference_affine: np.ndarray
-    checkpoint_sha256: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         vol_dict = self.volumetrics.to_dict()
-        res = {
+        return {
             "status": "success",
             "execution_time_seconds": round(self.execution_time_seconds, 2),
             "hardware_device": self.hardware_device,
@@ -84,9 +72,6 @@ class InferenceResult:
             "volumes_ml": vol_dict["volumes_ml"],
             "metrics": vol_dict["metrics"],
         }
-        if self.checkpoint_sha256:
-            res["checkpoint_sha256"] = self.checkpoint_sha256
-        return res
 
 
 # ─── Checksum and Weight Management ───────────────────────────────────────────
@@ -142,113 +127,13 @@ def download_official_weights(
     return dest
 
 
-# ─── Model Construction & Caching ─────────────────────────────────────────────
-
-def calculate_file_sha256(file_path: Union[str, Path]) -> str:
-    """Calculates the SHA-256 hash of a file on disk."""
-    p = Path(file_path)
-    hasher = hashlib.sha256()
-    with open(p, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest().lower()
-
-
-def resolve_weights_path(weights_path: Optional[Union[str, Path]] = None) -> Path:
-    """Resolves the absolute path to the SegResNet checkpoint."""
-    if weights_path is not None:
-        return Path(weights_path).resolve()
-    env_path = os.getenv("NEUROSCOPE_WEIGHTS_PATH")
-    if env_path:
-        return Path(env_path).resolve()
-    return DEFAULT_WEIGHTS_PATH.resolve()
-
-
-def clear_model_cache() -> None:
-    """Clears the cached model singleton (used for tests and reloads)."""
-    global _CACHED_MODEL, _CACHED_DEVICE, _CACHED_WEIGHTS_PATH, _CACHED_SHA256
-    _CACHED_MODEL = None
-    _CACHED_DEVICE = None
-    _CACHED_WEIGHTS_PATH = None
-    _CACHED_SHA256 = None
-
-
-def get_model_readiness(
-    weights_path: Optional[Union[str, Path]] = None,
-    device: Optional[torch.device] = None,
-) -> Dict[str, Any]:
-    """Checks and returns verified model readiness status, resolved path, and hashes."""
-    global _CACHED_MODEL, _CACHED_DEVICE, _CACHED_WEIGHTS_PATH, _CACHED_SHA256
-
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    target_path = resolve_weights_path(weights_path)
-    file_present = target_path.exists() and target_path.is_file()
-
-    sha256_val: Optional[str] = None
-    size_bytes: Optional[int] = None
-    load_error: Optional[str] = None
-
-    if file_present:
-        try:
-            size_bytes = target_path.stat().st_size
-            sha256_val = calculate_file_sha256(target_path)
-        except Exception as e:
-            load_error = f"Cannot read checkpoint file: {e}"
-
-    is_ready = False
-    if (
-        _CACHED_MODEL is not None
-        and _CACHED_WEIGHTS_PATH == target_path
-        and _CACHED_DEVICE == device
-    ):
-        is_ready = True
-    elif file_present and load_error is None:
-        try:
-            model = build_segresnet_model(device=device, weights_path=target_path, allow_untrained=False)
-            _CACHED_MODEL = model
-            _CACHED_DEVICE = device
-            _CACHED_WEIGHTS_PATH = target_path
-            _CACHED_SHA256 = sha256_val
-            is_ready = True
-        except Exception as e:
-            load_error = str(e)
-
-    device_name = (
-        torch.cuda.get_device_name(0)
-        if device.type == "cuda"
-        else f"CPU ({os.cpu_count() or 'multi'}-core)"
-    )
-
-    return {
-        "model_ready": is_ready,
-        "weights_present": file_present,
-        "model_weights_present": file_present,  # alias for backward compat
-        "checkpoint_path": str(target_path),
-        "checkpoint_sha256": _CACHED_SHA256 or sha256_val,
-        "checkpoint_size_bytes": size_bytes,
-        "hardware_device": device_name,
-        "model_architecture": "MONAI SegResNet (BraTS 2021)",
-        "error": load_error,
-    }
-
+# ─── Model Construction ───────────────────────────────────────────────────────
 
 def build_segresnet_model(
     device: torch.device,
     weights_path: Optional[Union[str, Path]] = None,
-    allow_untrained: bool = False,
 ) -> torch.nn.Module:
-    """Builds the official MONAI SegResNet architecture and loads weights.
-
-    Raises ModelNotReadyException if weights_path is missing/inaccessible and allow_untrained is False.
-    Raises ModelWeightsIncompatibleException if state_dict keys or shapes mismatch.
-    """
-    if weights_path is None and not allow_untrained:
-        raise ModelNotReadyException(
-            "Trained checkpoint path is required. Randomly initialized inference is forbidden in production."
-        )
-
+    """Builds the official MONAI SegResNet architecture and loads weights."""
     model = SegResNet(
         spatial_dims=3,
         init_filters=16,
@@ -262,74 +147,18 @@ def build_segresnet_model(
     if weights_path is not None:
         p = Path(weights_path)
         if not p.exists():
-            raise ModelNotReadyException(
-                f"Weights file not found at: {p}",
-                detail={"checkpoint_path": str(p)}
-            )
+            raise FileNotFoundError(f"Weights file not found at: {p}")
 
-        try:
-            state_dict = torch.load(str(p), map_location=device, weights_only=True)
-        except Exception as e:
-            raise ModelWeightsIncompatibleException(
-                f"Failed to load checkpoint file at '{p}': {e}",
-                detail={"error": str(e), "path": str(p)}
-            ) from e
-
+        state_dict = torch.load(str(p), map_location=device, weights_only=True)
+        # Handle state_dict keys with or without 'state_dict' wrapper
         if "state_dict" in state_dict:
             state_dict = state_dict["state_dict"]
 
-        try:
-            model.load_state_dict(state_dict, strict=True)
-        except Exception as e:
-            raise ModelWeightsIncompatibleException(
-                f"Checkpoint state_dict is incompatible with SegResNet architecture: {e}",
-                detail={"error": str(e), "path": str(p)}
-            ) from e
+        model.load_state_dict(state_dict, strict=True)
 
     model.to(device)
     model.eval()
     return model
-
-
-def get_or_load_model(
-    device: Optional[torch.device] = None,
-    weights_path: Optional[Union[str, Path]] = None,
-    allow_untrained: bool = False,
-) -> Tuple[torch.nn.Module, Path, Optional[str]]:
-    """Retrieves or loads the validated MONAI SegResNet instance."""
-    global _CACHED_MODEL, _CACHED_DEVICE, _CACHED_WEIGHTS_PATH, _CACHED_SHA256
-
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    if allow_untrained and weights_path is None:
-        model = build_segresnet_model(device=device, weights_path=None, allow_untrained=True)
-        return model, Path("untrained_model.pt"), None
-
-    target_path = resolve_weights_path(weights_path)
-    if not target_path.exists():
-        raise ModelNotReadyException(
-            f"Trained model checkpoint not found at: {target_path}. "
-            "Prediction cannot proceed without verified trained weights.",
-            detail={"checkpoint_path": str(target_path)}
-        )
-
-    if (
-        _CACHED_MODEL is not None
-        and _CACHED_WEIGHTS_PATH == target_path
-        and _CACHED_DEVICE == device
-    ):
-        return _CACHED_MODEL, target_path, _CACHED_SHA256
-
-    sha256_val = calculate_file_sha256(target_path)
-    model = build_segresnet_model(device=device, weights_path=target_path, allow_untrained=False)
-
-    _CACHED_MODEL = model
-    _CACHED_DEVICE = device
-    _CACHED_WEIGHTS_PATH = target_path
-    _CACHED_SHA256 = sha256_val
-
-    return model, target_path, sha256_val
 
 
 # ─── Preprocessing ───────────────────────────────────────────────────────────
@@ -404,12 +233,10 @@ def run_segmentation_inference(
     sw_batch_size: int = 1,
     overlap: float = 0.5,
     threshold: float = 0.5,
-    allow_untrained: bool = False,
 ) -> InferenceResult:
     """Executes end-to-end MONAI sliding window inference on multi-modal MRI scans.
 
     Never generates fake or random masks; runs real forward passes through SegResNet.
-    Strictly requires verified trained weights unless allow_untrained is explicitly True (unit tests).
     """
     import time
     start_time = time.perf_counter()
@@ -420,12 +247,8 @@ def run_segmentation_inference(
     # 1. Preprocess & stack input in verified order: [t1gd, t1, t2, flair]
     input_tensor, geometry, ref_affine = preprocess_multimodal_tensor(sequences)
 
-    # 2. Retrieve verified loaded model instance (strictly fail-closed)
-    model, loaded_path, loaded_sha256 = get_or_load_model(
-        device=device,
-        weights_path=weights_path,
-        allow_untrained=allow_untrained,
-    )
+    # 2. Build model and load weights
+    model = build_segresnet_model(device=device, weights_path=weights_path)
 
     # 3. Execute sliding-window inference with no gradients
     input_tensor = input_tensor.to(device)
@@ -472,5 +295,4 @@ def run_segmentation_inference(
         execution_time_seconds=execution_time,
         hardware_device=device_name,
         reference_affine=ref_affine,
-        checkpoint_sha256=loaded_sha256,
     )

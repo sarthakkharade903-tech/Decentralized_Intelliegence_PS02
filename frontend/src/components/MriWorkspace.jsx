@@ -1,61 +1,50 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import {
-  UploadCloud,
-  FileCheck,
-  CheckCircle2,
-  AlertCircle,
-  X,
-  RotateCcw,
-  ShieldCheck,
-  Layers,
-  ArrowRight,
-  Loader2,
+  Upload,
   FileText,
+  CheckCircle2,
+  X,
+  AlertCircle,
+  BarChart3,
   Info,
-  Check,
+  Loader2,
   AlertTriangle,
-  Compass
+  RotateCcw
 } from 'lucide-react';
-import Brain3D from './Brain3D';
-import {
-  validateNiftiFile,
-  suggestSequenceFromFilename,
-  validateMriDataset
-} from '../services/api';
+import { validateNiftiFile, predictSegmentation } from '../services/api';
+import thumbT1 from '../assets/atlas/thumb_t1.png';
+import thumbT1Gd from '../assets/atlas/thumb_t1gd.png';
+import thumbT2 from '../assets/atlas/thumb_t2.png';
+import thumbFlair from '../assets/atlas/thumb_flair.png';
 
 const SEQUENCES = [
   {
     id: 't1',
     name: 'T1',
-    fullName: 'T1 Native',
-    tag: 'T1',
-    desc: 'Anatomical structural baseline & gray/white matter contrast'
+    thumb: thumbT1,
+    info: 'T1 Native anatomical baseline'
   },
   {
     id: 't1gd',
-    name: 'T1ce',
-    fullName: 'T1ce / T1Gd',
-    tag: 'T1CE',
-    desc: 'Gadolinium contrast — active enhancing tumor margins (ET)'
+    name: 'T1Gd',
+    thumb: thumbT1Gd,
+    info: 'T1 Gadolinium contrast-enhanced (active tumor margin)'
   },
   {
     id: 't2',
     name: 'T2',
-    fullName: 'T2-Weighted',
-    tag: 'T2',
-    desc: 'Water/fluid sensitivity — bulk lesion and edema hyperintensity'
+    thumb: thumbT2,
+    info: 'T2-weighted (bulk lesion and fluid edema)'
   },
   {
     id: 'flair',
     name: 'FLAIR',
-    fullName: 'FLAIR',
-    tag: 'FLAIR',
-    desc: 'Fluid Attenuated Inversion Recovery — peritumoral vasogenic edema (ED)'
+    thumb: thumbFlair,
+    info: 'Fluid Attenuated Inversion Recovery (peritumoral vasogenic edema)'
   }
 ];
 
 export default function MriWorkspace({ workspaceRef, onInferenceSuccess }) {
-  // ─── File State ────────────────────────────────────────────────────────────
   const [files, setFiles] = useState({
     t1: null,
     t1gd: null,
@@ -63,37 +52,18 @@ export default function MriWorkspace({ workspaceRef, onInferenceSuccess }) {
     flair: null
   });
 
-  // Slot validation states: 'empty' | 'selected' | 'validating' | 'valid' | 'invalid'
-  const [slotStates, setSlotStates] = useState({
-    t1: 'empty',
-    t1gd: 'empty',
-    t2: 'empty',
-    flair: 'empty'
-  });
-
-  // Per-slot error messages
-  const [slotErrors, setSlotErrors] = useState({
+  const [errors, setErrors] = useState({
     t1: null,
     t1gd: null,
     t2: null,
     flair: null
   });
 
-  // Per-slot verified metadata from backend
-  const [slotMetadata, setSlotMetadata] = useState({
-    t1: null,
-    t1gd: null,
-    t2: null,
-    flair: null
-  });
-
-  // ─── Overall Dataset Validation State ──────────────────────────────────────
-  // 'idle' | 'validating' | 'valid' | 'invalid'
-  const [datasetValidationStatus, setDatasetValidationStatus] = useState('idle');
-  const [datasetError, setDatasetError] = useState(null);
-  const [datasetValidationResult, setDatasetValidationResult] = useState(null);
-  const [dragOverSlot, setDragOverSlot] = useState(null);
-  const [suggestionBanner, setSuggestionBanner] = useState(null);
+  const [activeTooltip, setActiveTooltip] = useState(null);
+  // 'idle' | 'uploading' | 'inferring' | 'error' | 'success'
+  const [analysisStatus, setAnalysisStatus] = useState('idle');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [analysisError, setAnalysisError] = useState(null);
 
   const fileInputRefs = {
     t1: useRef(null),
@@ -104,361 +74,175 @@ export default function MriWorkspace({ workspaceRef, onInferenceSuccess }) {
 
   const abortControllerRef = useRef(null);
 
-  const formatBytes = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B';
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
   };
 
-  // ─── Sequence Selection & Pre-Flight ───────────────────────────────────────
-  const handleAssignFile = (slotId, file) => {
+  const handleSelectFile = (seqId, file) => {
     if (!file) return;
 
-    setDatasetValidationStatus('idle');
-    setDatasetError(null);
-    setDatasetValidationResult(null);
-
-    // 1. Client-Side Format and 1 GiB Size Guard
-    const val = validateNiftiFile(file);
-    if (!val.valid) {
-      setSlotStates((prev) => ({ ...prev, [slotId]: 'invalid' }));
-      setSlotErrors((prev) => ({ ...prev, [slotId]: val.error }));
-      setFiles((prev) => ({ ...prev, [slotId]: file }));
+    // Use api.js validation (extension, size, empty)
+    const validation = validateNiftiFile(file);
+    if (!validation.valid) {
+      setErrors((prev) => ({
+        ...prev,
+        [seqId]: validation.error
+      }));
       return;
     }
 
-    // 2. Prevent duplicate file assignment across slots
-    for (const [otherId, existing] of Object.entries(files)) {
-      if (otherId !== slotId && existing && existing.name === file.name && existing.size === file.size) {
-        const otherName = SEQUENCES.find((s) => s.id === otherId)?.fullName || otherId;
-        setSlotStates((prev) => ({ ...prev, [slotId]: 'invalid' }));
-        setSlotErrors((prev) => ({
+    // Check for duplicate file assignment across slots
+    for (const [key, existingFile] of Object.entries(files)) {
+      if (key !== seqId && existingFile && existingFile.name === file.name && existingFile.size === file.size) {
+        const otherName = SEQUENCES.find((s) => s.id === key)?.name || key;
+        setErrors((prev) => ({
           ...prev,
-          [slotId]: `Duplicate scan: "${file.name}" is already assigned to ${otherName}. Each slot requires a distinct MRI modality.`
+          [seqId]: `Duplicate file: Already assigned to ${otherName}`
         }));
-        setFiles((prev) => ({ ...prev, [slotId]: file }));
         return;
       }
     }
 
-    setSlotErrors((prev) => ({ ...prev, [slotId]: null }));
-    setSlotStates((prev) => ({ ...prev, [slotId]: 'selected' }));
-    setFiles((prev) => ({ ...prev, [slotId]: file }));
+    setErrors((prev) => ({ ...prev, [seqId]: null }));
+    setFiles((prev) => ({ ...prev, [seqId]: file }));
   };
 
-  const handleRemoveFile = (slotId, e) => {
-    if (e) e.stopPropagation();
-    setFiles((prev) => ({ ...prev, [slotId]: null }));
-    setSlotStates((prev) => ({ ...prev, [slotId]: 'empty' }));
-    setSlotErrors((prev) => ({ ...prev, [slotId]: null }));
-    setSlotMetadata((prev) => ({ ...prev, [slotId]: null }));
-    setDatasetValidationStatus('idle');
-    setDatasetError(null);
-    setDatasetValidationResult(null);
-    if (fileInputRefs[slotId].current) {
-      fileInputRefs[slotId].current.value = '';
+  const handleRemoveFile = (seqId, e) => {
+    e.stopPropagation();
+    setFiles((prev) => ({ ...prev, [seqId]: null }));
+    setErrors((prev) => ({ ...prev, [seqId]: null }));
+    if (fileInputRefs[seqId].current) {
+      fileInputRefs[seqId].current.value = '';
     }
   };
 
-  const handleBatchDrop = (fileList) => {
-    const rawFiles = Array.from(fileList);
-    const newAssignments = { ...files };
-    const suggestions = [];
-    const usedNames = new Set();
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
 
-    rawFiles.forEach((file) => {
-      const suggestion = suggestSequenceFromFilename(file.name);
-      if (suggestion.slotId && !usedNames.has(file.name) && !newAssignments[suggestion.slotId]) {
-        newAssignments[suggestion.slotId] = file;
-        usedNames.add(file.name);
-        suggestions.push({
-          filename: file.name,
-          slot: suggestion.slotId,
-          confidence: suggestion.confidence
-        });
-      }
-    });
-
-    if (suggestions.length > 0) {
-      Object.entries(newAssignments).forEach(([slotId, f]) => {
-        if (f) handleAssignFile(slotId, f);
-      });
-      setSuggestionBanner(
-        `Auto-detected ${suggestions.length} sequence(s) from filenames. You can verify or manually change any slot.`
-      );
-    } else {
-      setSuggestionBanner('Could not auto-detect sequences from filenames. Please assign files to each slot individually.');
+  const handleDrop = (seqId, e) => {
+    e.preventDefault();
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      handleSelectFile(seqId, droppedFile);
     }
   };
 
-  const handleResetAll = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    setFiles({ t1: null, t1gd: null, t2: null, flair: null });
-    setSlotStates({ t1: 'empty', t1gd: 'empty', t2: 'empty', flair: 'empty' });
-    setSlotErrors({ t1: null, t1gd: null, t2: null, flair: null });
-    setSlotMetadata({ t1: null, t1gd: null, t2: null, flair: null });
-    setDatasetValidationStatus('idle');
-    setDatasetError(null);
-    setDatasetValidationResult(null);
-    setSuggestionBanner(null);
-    Object.values(fileInputRefs).forEach((ref) => {
-      if (ref.current) ref.current.value = '';
-    });
-  };
+  const uploadedCount = Object.values(files).filter(Boolean).length;
+  const allUploaded = uploadedCount === 4;
 
-  // ─── Authoritative Backend Dataset Validation ──────────────────────────────
-  const handleValidateDataset = async () => {
-    const missing = SEQUENCES.filter((s) => !files[s.id]);
-    if (missing.length > 0) {
-      setDatasetError(`Please select all four required sequences (${missing.map((s) => s.name).join(', ')}).`);
-      return;
-    }
+  const handleContinueAnalysis = async () => {
+    if (!allUploaded) return;
 
-    setDatasetValidationStatus('validating');
-    setDatasetError(null);
-    setSlotStates({
-      t1: 'validating',
-      t1gd: 'validating',
-      t2: 'validating',
-      flair: 'validating'
-    });
+    setAnalysisStatus('uploading');
+    setUploadProgress(0);
+    setAnalysisError(null);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      const result = await validateMriDataset({
+      const result = await predictSegmentation({
         t1: files.t1,
         t1gd: files.t1gd,
         t2: files.t2,
         flair: files.flair,
-        patientId: 'BraTS2021_CASE',
+        onProgress: (percent) => {
+          setUploadProgress(percent);
+          if (percent >= 100) {
+            setAnalysisStatus('inferring');
+          }
+        },
         signal: controller.signal
       });
 
-      setDatasetValidationResult(result);
-      setDatasetValidationStatus('valid');
-
-      const meta = result.sequences || {};
-      setSlotMetadata(meta);
-      setSlotStates({
-        t1: 'valid',
-        t1gd: 'valid',
-        t2: 'valid',
-        flair: 'valid'
-      });
-      setSlotErrors({ t1: null, t1gd: null, t2: null, flair: null });
+      setAnalysisStatus('success');
+      if (onInferenceSuccess) {
+        onInferenceSuccess(result, files);
+      }
     } catch (err) {
       if (err.name === 'AbortError') {
-        setDatasetValidationStatus('idle');
+        setAnalysisStatus('idle');
         return;
       }
-
-      setDatasetValidationStatus('invalid');
-      const errorMsg = err.message || 'Dataset validation failed on the backend.';
-      setDatasetError(errorMsg);
-
-      const detail = err.detail || {};
-      const targetSeq = detail.sequence || detail.target || null;
-
-      if (targetSeq && slotStates[targetSeq]) {
-        setSlotStates((prev) => ({ ...prev, [targetSeq]: 'invalid' }));
-        setSlotErrors((prev) => ({ ...prev, [targetSeq]: errorMsg }));
-      } else {
-        setSlotStates((prev) => ({
-          t1: prev.t1 === 'validating' ? 'selected' : prev.t1,
-          t1gd: prev.t1gd === 'validating' ? 'selected' : prev.t1gd,
-          t2: prev.t2 === 'validating' ? 'selected' : prev.t2,
-          flair: prev.flair === 'validating' ? 'selected' : prev.flair
-        }));
-      }
+      setAnalysisStatus('error');
+      setAnalysisError(
+        err.message || 'Unable to connect to FastAPI backend at http://localhost:8000.'
+      );
     }
   };
 
-  const handleContinueToViewer = () => {
-    if (datasetValidationStatus !== 'valid') return;
-    if (onInferenceSuccess) {
-      onInferenceSuccess(null, files);
-    }
-  };
-
-  const selectedCount = Object.values(files).filter(Boolean).length;
-  const allSelected = selectedCount === 4;
-  const isValidating = datasetValidationStatus === 'validating';
-  const isFullyValid = datasetValidationStatus === 'valid';
-
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+  // Dynamic step tracker reflecting live pipeline state
+  const isProcessing = analysisStatus === 'uploading' || analysisStatus === 'inferring';
+  const workflowSteps = [
+    { step: '1', label: 'Upload Scans', active: !allUploaded && analysisStatus === 'idle' },
+    { step: '2', label: 'Process', active: isProcessing },
+    { step: '3', label: 'View Results', active: analysisStatus === 'success' },
+    { step: '4', label: 'Explore & Analyze', active: false }
+  ];
 
   return (
     <section
       ref={workspaceRef}
       id="mri-workspace"
-      className="relative w-full bg-[#E9DDD5] text-[#30252A] py-14 px-6 lg:px-12 border-t border-[#DDD0C8]"
+      className="relative w-full bg-[#6D263D] px-6 lg:px-12 pt-14 pb-18 text-[#F8F5F0]"
     >
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-10">
 
-        {/* ─── 1. Header: Editorial Branding + Step Tracker + Disclaimer ─── */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-[#DDD0C8]">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2.5">
-              <span className="px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-[#F3ECE7] text-[#6D263D] border border-[#DDD0C8] shadow-xs">
-                MRI Ingestion & Geometric Integrity
-              </span>
-              <span className="text-xs text-[#6E5D65] font-mono">
-                BraTS 2021 mpMRI Standard
-              </span>
-            </div>
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-normal tracking-tight text-[#30252A] font-serif leading-[1.06]">
-              Prepare your MRI dataset.
-            </h2>
-            <p className="text-xs sm:text-sm text-[#56474E] max-w-2xl leading-relaxed pt-1 font-sans">
-              Assign the four co-registered multi-parametric sequences (<span className="font-semibold text-[#6D263D]">T1</span>, <span className="font-semibold text-[#6D263D]">T1ce</span>, <span className="font-semibold text-[#6D263D]">T2</span>, <span className="font-semibold text-[#6D263D]">FLAIR</span>). Scans must be genuine 3D volumes in NIfTI format (<code className="text-[#30252A] font-mono text-xs">.nii</code> or <code className="text-[#30252A] font-mono text-xs">.nii.gz</code>, maximum 1 GiB per file).
+        {/* Workspace Header: Eyebrow + Title + Description */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="lg:col-span-4 space-y-3">
+            <p className="text-xs font-semibold tracking-widest uppercase text-[#F8F5F0]/70">
+              Your MRI Workspace
             </p>
-          </div>
+            <h2 className="text-4xl sm:text-5xl font-normal tracking-tight text-[#F8F5F0] font-serif leading-[1.08]">
+              Begin with your <br />
+              <span className="font-serif">MRI scans.</span>
+            </h2>
+            <p className="text-xs sm:text-sm text-[#F8F5F0]/80 leading-relaxed pt-1 max-w-sm">
+              Select the four MRI sequences (NIfTI format) to get started.
+            </p>
 
-          {/* Workflow Step Tracker */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <div className="flex items-center gap-1.5 bg-[#F8F5F0] p-1.5 rounded-full border border-[#DDD0C8] text-xs font-sans shadow-xs">
-              <span className={`px-3 py-1 rounded-full flex items-center gap-1.5 transition-colors ${
-                !isFullyValid
-                  ? 'bg-[#6D263D] text-[#F8F5F0] font-semibold'
-                  : 'text-[#6E5D65]'
-              }`}>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#F8F5F0]" />
-                <span>1. Upload</span>
-              </span>
-              <span className="text-[#DDD0C8]">→</span>
-              <span className={`px-3 py-1 rounded-full flex items-center gap-1.5 transition-colors ${
-                isValidating
-                  ? 'bg-[#8C485A] text-[#F8F5F0] font-semibold animate-pulse'
-                  : isFullyValid
-                  ? 'bg-emerald-700 text-[#F8F5F0] font-semibold'
-                  : 'text-[#8C7C83]'
-              }`}>
-                {isValidating ? <Loader2 className="w-3 h-3 animate-spin" /> : isFullyValid ? <Check className="w-3 h-3" /> : null}
-                <span>2. Validate</span>
-              </span>
-              <span className="text-[#DDD0C8]">→</span>
-              <span className="px-3 py-1 rounded-full text-[#8C7C83]">
-                3. Inspect
-              </span>
-              <span className="text-[#DDD0C8]">→</span>
-              <span className="px-3 py-1 rounded-full text-[#8C7C83]">
-                4. Segment
-              </span>
-            </div>
-
-            <div className="text-[11px] font-mono px-3 py-1.5 rounded-full bg-[#F3ECE7] border border-[#DDD0C8] text-[#6E5D65] shadow-xs">
-              Guardrail: 1 GiB / file
+            {/* Dynamic Workflow Step Indicator */}
+            <div className="pt-4 flex flex-col space-y-2.5">
+              {workflowSteps.map((s) => (
+                <div key={s.step} className="flex items-center gap-3">
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
+                      s.active
+                        ? 'bg-[#F8F5F0] text-[#6D263D]'
+                        : 'bg-[#542031] text-[#F8F5F0]/60 border border-[#8C3A52]/40'
+                    }`}
+                  >
+                    {s.step}
+                  </div>
+                  <span
+                    className={`text-xs font-medium transition-colors ${
+                      s.active ? 'text-[#F8F5F0] font-semibold' : 'text-[#F8F5F0]/60'
+                    }`}
+                  >
+                    {s.label}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
 
-        {/* Suggestion Notification */}
-        {suggestionBanner && (
-          <div className="p-3.5 rounded-2xl bg-[#F8F5F0] border border-[#6D263D]/30 flex items-center justify-between text-xs text-[#30252A] shadow-sm animate-in fade-in">
-            <div className="flex items-center gap-2.5">
-              <Info className="w-4 h-4 text-[#6D263D] flex-shrink-0" />
-              <span className="font-sans leading-normal">{suggestionBanner}</span>
-            </div>
-            <button
-              onClick={() => setSuggestionBanner(null)}
-              className="p-1 rounded-full text-[#8C7C83] hover:text-[#30252A] transition-colors cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* ─── 2. Main Grid: 4 Upload Slots (Left) + 3D Reference Model (Right) ─── */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-
-          {/* Left Column (7 cols): 4 Sequence Upload Cards */}
-          <div className="lg:col-span-7 space-y-4">
-
-            {/* Batch Drop Area */}
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOverSlot('batch');
-              }}
-              onDragLeave={() => setDragOverSlot(null)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOverSlot(null);
-                if (e.dataTransfer.files) handleBatchDrop(e.dataTransfer.files);
-              }}
-              onClick={() => document.getElementById('batch-multi-input')?.click()}
-              className={`p-4 rounded-2xl border border-dashed transition-all cursor-pointer text-center group ${
-                dragOverSlot === 'batch'
-                  ? 'border-[#6D263D] bg-[#F8F5F0] shadow-md scale-[1.01]'
-                  : 'border-[#DDD0C8] hover:border-[#6D263D]/60 bg-[#F8F5F0]/70 hover:bg-[#F8F5F0]'
-              }`}
-            >
-              <input
-                id="batch-multi-input"
-                type="file"
-                multiple
-                accept=".nii,.nii.gz"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files) handleBatchDrop(e.target.files);
-                }}
-              />
-              <div className="flex items-center justify-center gap-2.5 text-xs text-[#56474E] group-hover:text-[#30252A] transition-colors">
-                <UploadCloud className="w-4 h-4 text-[#6D263D] group-hover:scale-110 transition-transform" />
-                <span className="font-medium">
-                  Drop all 4 NIfTI files here for auto-detection, or assign each sequence individually below
-                </span>
-              </div>
-            </div>
-
-            {/* Four Discrete Sequence Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* 4 Sequence Upload Cards */}
+          <div className="lg:col-span-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
               {SEQUENCES.map((seq) => {
                 const file = files[seq.id];
-                const state = slotStates[seq.id];
-                const error = slotErrors[seq.id];
-                const meta = slotMetadata[seq.id];
-                const isDragTarget = dragOverSlot === seq.id;
+                const error = errors[seq.id];
 
                 return (
                   <div
                     key={seq.id}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setDragOverSlot(seq.id);
-                    }}
-                    onDragLeave={() => setDragOverSlot(null)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setDragOverSlot(null);
-                      const dropped = e.dataTransfer.files?.[0];
-                      if (dropped) handleAssignFile(seq.id, dropped);
-                    }}
-                    className={`relative rounded-2xl p-4 border transition-all duration-200 flex flex-col justify-between shadow-xs ${
-                      state === 'valid'
-                        ? 'bg-[#F8F5F0] border-emerald-500/60 shadow-sm'
-                        : state === 'invalid'
-                        ? 'bg-rose-50/70 border-rose-300 shadow-sm'
-                        : state === 'validating'
-                        ? 'bg-[#F8F5F0] border-[#6D263D]/50 animate-pulse'
-                        : file
-                        ? 'bg-[#F8F5F0] border-[#6D263D]/40'
-                        : isDragTarget
-                        ? 'bg-[#F8F5F0] border-[#6D263D] shadow-md scale-[1.01]'
-                        : 'bg-[#F8F5F0] border-[#DDD0C8] hover:border-[#6D263D]/40'
-                    }`}
+                    className="relative bg-[#F8F5F0] rounded-2xl p-4 text-[#30252A] shadow-md flex flex-col justify-between transition-all duration-200 hover:shadow-lg"
                   >
                     {/* Hidden Native File Input */}
                     <input
@@ -467,315 +251,213 @@ export default function MriWorkspace({ workspaceRef, onInferenceSuccess }) {
                       accept=".nii,.nii.gz"
                       className="hidden"
                       onChange={(e) => {
-                        if (e.target.files?.[0]) handleAssignFile(seq.id, e.target.files[0]);
+                        if (e.target.files?.[0]) {
+                          handleSelectFile(seq.id, e.target.files[0]);
+                        }
                       }}
                     />
 
+                    {/* Card Top: Thumbnail + Title + Info Icon */}
                     <div>
-                      {/* Slot Header: Modality Tag + Name + Status Pill */}
-                      <div className="flex items-center justify-between pb-2.5 border-b border-[#EBE3DE]">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#F3ECE7] text-[#6D263D] border border-[#DDD0C8]">
-                            {seq.tag}
-                          </span>
-                          <span className="text-sm font-bold text-[#30252A] font-serif">
-                            {seq.name}
-                          </span>
+                      <div className="flex items-center justify-between pb-3 border-b border-[#EBE3DE]">
+                        <div className="flex items-center gap-2.5">
+                          {/* Miniature Axial MRI Slice Thumbnail */}
+                          <div className="w-9 h-9 rounded-lg overflow-hidden bg-black flex-shrink-0 shadow-xs border border-black/10">
+                            <img
+                              src={seq.thumb}
+                              alt={`${seq.name} scan thumbnail`}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="text-sm font-bold text-[#30252A]">{seq.name}</h4>
+                              <div
+                                className="relative cursor-pointer"
+                                onMouseEnter={() => setActiveTooltip(seq.id)}
+                                onMouseLeave={() => setActiveTooltip(null)}
+                              >
+                                <Info className="w-3.5 h-3.5 text-[#8C7C83] hover:text-[#6D263D] transition-colors" />
+                                {activeTooltip === seq.id && (
+                                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-40 p-2 rounded-lg bg-[#30252A] text-[#F8F5F0] text-[10px] leading-tight z-30 shadow-lg pointer-events-none">
+                                    {seq.info}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-[10px] font-mono text-[#8C7C83]">.nii / .nii.gz</p>
+                          </div>
                         </div>
 
-                        {/* Status Badge */}
-                        <div>
-                          {state === 'valid' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 font-semibold">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-700" />
-                              <span>Verified 3D</span>
-                            </span>
-                          )}
-                          {state === 'validating' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#F3ECE7] text-[#6D263D] border border-[#6D263D]/30 flex items-center gap-1">
-                              <Loader2 className="w-3 h-3 animate-spin text-[#6D263D]" />
-                              <span>Validating</span>
-                            </span>
-                          )}
-                          {state === 'invalid' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1 font-semibold">
-                              <AlertCircle className="w-3 h-3 text-rose-600" />
-                              <span>Invalid</span>
-                            </span>
-                          )}
-                          {state === 'selected' && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#EAE0D9] text-[#30252A] border border-[#DDD0C8]">
-                              Selected
-                            </span>
-                          )}
-                          {state === 'empty' && (
-                            <span className="text-[10px] font-mono text-[#8C7C83]">
-                              Empty slot
-                            </span>
-                          )}
+                        {file && (
+                          <div className="text-emerald-700" title="Sequence loaded">
+                            <CheckCircle2 className="w-4 h-4" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Dropzone / Choose File Area */}
+                      <div
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(seq.id, e)}
+                        onClick={() => fileInputRefs[seq.id].current?.click()}
+                        className="mt-3 py-4 px-2 rounded-xl border border-dashed border-[#DDD0C8] hover:border-[#6D263D]/60 bg-[#F4ECE7]/50 hover:bg-[#F4ECE7] transition-all cursor-pointer text-center group"
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <Upload className="w-4 h-4 text-[#6D263D] group-hover:-translate-y-0.5 transition-transform" />
+                          <span className="text-xs font-semibold text-[#30252A] group-hover:text-[#6D263D] transition-colors">
+                            Choose File
+                          </span>
+                          <span className="text-[10px] text-[#8C7C83]">or drag and drop</span>
                         </div>
                       </div>
 
-                      {/* Description */}
-                      <p className="text-[11px] text-[#56474E] mt-2 line-clamp-1 leading-normal font-sans">
-                        {seq.desc}
-                      </p>
-
-                      {/* File Details or Dropzone Callout */}
-                      {file ? (
-                        <div className="mt-3 p-2.5 rounded-xl bg-[#F3ECE7] border border-[#DDD0C8] space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span title={file.name} className="font-mono text-[#30252A] truncate max-w-[190px] text-[11px] font-semibold">
+                      {/* Selected File Details */}
+                      {file && (
+                        <div className="mt-2.5 p-2 rounded-lg bg-[#EAE0D9] flex items-center justify-between text-xs">
+                          <div className="min-w-0 pr-1">
+                            <p title={file.name} className="text-[11px] font-mono text-[#30252A] truncate">
                               {file.name}
-                            </span>
-                            <span className="text-[10px] font-mono text-[#6E5D65] flex-shrink-0">
-                              {formatBytes(file.size)}
-                            </span>
+                            </p>
+                            <p className="text-[10px] font-mono text-[#6E5D65]">
+                              {formatFileSize(file.size)}
+                            </p>
                           </div>
-
-                          {/* Verified Spatial Metadata (when validated) */}
-                          {meta && (
-                            <div className="pt-1 border-t border-[#DDD0C8] flex items-center justify-between text-[10px] font-mono text-[#6D263D]">
-                              <span>Grid: {meta.dimensions?.join('×')}</span>
-                              <span>{meta.orientation || 'RAS'} · {meta.voxel_spacing_mm?.[0]}mm</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div
-                          onClick={() => fileInputRefs[seq.id].current?.click()}
-                          className="mt-3 py-3.5 px-2 rounded-xl border border-dashed border-[#DDD0C8] hover:border-[#6D263D]/60 bg-[#F4ECE7]/50 hover:bg-[#F4ECE7] transition-all cursor-pointer text-center group"
-                        >
-                          <span className="text-xs text-[#6D263D] font-semibold group-hover:underline">
-                            Choose NIfTI file
-                          </span>
-                          <span className="block text-[10px] text-[#8C7C83] mt-0.5 font-mono">
-                            .nii or .nii.gz (≤ 1 GiB)
-                          </span>
+                          <button
+                            onClick={(e) => handleRemoveFile(seq.id, e)}
+                            className="p-1 rounded text-[#6E5D65] hover:text-[#6D263D] transition-colors cursor-pointer"
+                            title="Remove file"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       )}
 
-                      {/* Error Message */}
+                      {/* Format / Duplicate Error */}
                       {error && (
-                        <div className="mt-2.5 p-2 rounded-xl bg-rose-100 border border-rose-300 text-[10px] text-rose-800 flex items-start gap-1.5 leading-snug">
-                          <AlertCircle className="w-3.5 h-3.5 text-rose-700 flex-shrink-0 mt-0.5" />
-                          <span>{error}</span>
+                        <div className="mt-2 p-1.5 rounded bg-rose-100 border border-rose-300 text-[10px] text-rose-800 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate" title={error}>{error}</span>
                         </div>
                       )}
                     </div>
-
-                    {/* Actions: Change / Remove */}
-                    {file && (
-                      <div className="mt-3 pt-2.5 border-t border-[#EBE3DE] flex items-center justify-between gap-2">
-                        <button
-                          onClick={() => fileInputRefs[seq.id].current?.click()}
-                          disabled={isValidating}
-                          className="px-3 py-1 rounded-full text-[11px] font-sans font-medium text-[#6D263D] bg-[#F3ECE7] hover:bg-[#EAE0D9] border border-[#DDD0C8] transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-40"
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                          <span>Replace</span>
-                        </button>
-                        <button
-                          onClick={(e) => handleRemoveFile(seq.id, e)}
-                          disabled={isValidating}
-                          className="p-1 rounded-full text-[#8C7C83] hover:text-[#991b1b] hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-40"
-                          title="Remove file"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
                   </div>
                 );
               })}
             </div>
-
-            {/* Validation Feedback & Dataset Level Errors */}
-            {datasetError && (
-              <div className="p-4 rounded-2xl bg-rose-100/90 border border-rose-300 flex items-start gap-3 text-xs text-rose-900 shadow-sm animate-in fade-in">
-                <AlertTriangle className="w-4 h-4 text-rose-700 flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-semibold text-rose-950 font-sans">Dataset Validation Invariant Failed</p>
-                  <p className="text-[11px] text-rose-800 leading-relaxed font-sans">{datasetError}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Validation Success Card */}
-            {isFullyValid && datasetValidationResult && (
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 space-y-2.5 text-xs text-emerald-950 shadow-sm animate-in fade-in">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-semibold text-emerald-900 text-sm font-sans">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-                    <span>Authoritative Backend Validation Succeeded</span>
-                  </div>
-                  <span className="font-mono text-[10px] text-emerald-700 font-semibold px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-200">
-                    HTTP 200 · Co-registered
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center pt-1 font-mono text-[11px]">
-                  <div className="p-2 rounded-xl bg-[#F8F5F0] border border-[#DDD0C8]">
-                    <span className="text-[#6E5D65] text-[10px] block">Dimensions</span>
-                    <span className="text-[#30252A] font-bold">
-                      {datasetValidationResult.geometry?.dimensions?.join('×')}
-                    </span>
-                  </div>
-                  <div className="p-2 rounded-xl bg-[#F8F5F0] border border-[#DDD0C8]">
-                    <span className="text-[#6E5D65] text-[10px] block">Voxel Spacing</span>
-                    <span className="text-[#6D263D] font-bold">
-                      {datasetValidationResult.geometry?.voxel_spacing_mm?.[0]} mm
-                    </span>
-                  </div>
-                  <div className="p-2 rounded-xl bg-[#F8F5F0] border border-[#DDD0C8]">
-                    <span className="text-[#6E5D65] text-[10px] block">Orientation</span>
-                    <span className="text-emerald-800 font-bold">
-                      {datasetValidationResult.geometry?.orientation} (RAS+)
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-
-          {/* Right Column (5 cols): 3D Anatomical Reference Atlas Panel */}
-          <div className="lg:col-span-5 space-y-4">
-            <div className="relative rounded-2xl bg-[#F8F5F0] border border-[#DDD0C8] overflow-hidden shadow-sm flex flex-col h-[480px]">
-
-              {/* 3D Header with Mandatory Disclaimer Badge */}
-              <div className="p-4 pb-2 z-10 flex items-start justify-between gap-2 border-b border-[#EBE3DE] bg-[#F8F5F0]/90 backdrop-blur-md">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Compass className="w-4 h-4 text-[#6D263D]" />
-                    <h3 className="text-sm font-bold text-[#30252A] font-serif tracking-tight">
-                      3D Anatomical Reference
-                    </h3>
-                  </div>
-                  <p className="text-[10px] font-mono text-[#6E5D65] mt-0.5">
-                    Cortical structural orientation atlas
-                  </p>
-                </div>
-
-                {/* Explicit Disclaimer Label */}
-                <div className="px-2.5 py-1 rounded-full bg-[#F3ECE7] border border-[#6D263D]/30 text-[9px] font-mono text-[#6D263D] font-bold uppercase tracking-wider text-right flex-shrink-0">
-                  REFERENCE ANATOMY<br />NOT PATIENT DATA
-                </div>
-              </div>
-
-              {/* Interactive Three.js Anatomical Brain */}
-              <div className="relative flex-1 w-full bg-[#EAE0D9]/50 overflow-hidden">
-                <Brain3D />
-
-                {/* Subtle Sequence Legend Overlay */}
-                <div className="absolute bottom-3 left-3 right-3 p-3 rounded-xl bg-[#F8F5F0]/95 border border-[#DDD0C8] backdrop-blur-md z-10 shadow-sm">
-                  <div className="text-[10px] font-mono text-[#6E5D65] uppercase tracking-wider font-semibold mb-1.5 flex items-center justify-between">
-                    <span>mpMRI Modality Legend</span>
-                    <span className="text-[9px] text-[#8C7C83]">4 Core Scans Required</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] font-mono">
-                    <div className="flex items-center gap-1.5 text-[#30252A]">
-                      <span className="w-2 h-2 rounded-full bg-[#6D263D]" />
-                      <span>T1: Parenchyma Baseline</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[#30252A]">
-                      <span className="w-2 h-2 rounded-full bg-[#be123c]" />
-                      <span>T1ce: Enhancing Margin</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[#30252A]">
-                      <span className="w-2 h-2 rounded-full bg-[#0d9488]" />
-                      <span>T2: Bulk Fluid Lesion</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[#30252A]">
-                      <span className="w-2 h-2 rounded-full bg-[#d97706]" />
-                      <span>FLAIR: Vasogenic Edema</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Hardware & Integrity Invariant Box */}
-            <div className="p-4 rounded-2xl bg-[#F8F5F0] border border-[#DDD0C8] flex items-start gap-3 text-xs text-[#56474E] shadow-xs">
-              <ShieldCheck className="w-4 h-4 text-[#6D263D] flex-shrink-0 mt-0.5" />
-              <div className="text-[11px] leading-relaxed font-sans">
-                <strong className="text-[#30252A]">Local Integrity Pipeline:</strong> Validation tests spatial dimensions, non-singular coordinate affines, and absence of non-finite voxels on your local FastAPI server before proceeding to the 3D viewer.
-              </div>
-            </div>
-          </div>
-
         </div>
 
-        {/* ─── 3. Bottom Action Bar & Validation Gating ─── */}
-        <div className="p-5 rounded-2xl bg-[#F8F5F0] border border-[#DDD0C8] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="text-xs text-[#56474E] font-sans">
-              Status: <span className="text-[#30252A] font-semibold">{selectedCount}/4 sequences assigned</span>
-              {isFullyValid && (
-                <span className="ml-2 text-emerald-800 font-bold">· Dataset Validated</span>
-              )}
+        {/* Bottom Requirement Banner & Action CTA */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center pt-2">
+
+          {/* Requirement Notice Box */}
+          <div className="lg:col-span-8 p-4 rounded-xl bg-[#542031]/80 border border-[#8C3A52]/40 flex items-center gap-3.5">
+            <div className="p-2 rounded-lg bg-[#6D263D] text-[#F8F5F0] flex-shrink-0">
+              <FileText className="w-5 h-5" />
             </div>
-            {selectedCount > 0 && (
-              <button
-                onClick={handleResetAll}
-                disabled={isValidating}
-                className="text-[11px] font-mono text-[#8C7C83] hover:text-[#6D263D] underline cursor-pointer disabled:opacity-40"
-              >
-                Clear all
-              </button>
-            )}
+            <div>
+              <h5 className="text-xs sm:text-sm font-semibold text-[#F8F5F0]">
+                All four sequences are required
+              </h5>
+              <p className="text-[11px] sm:text-xs text-[#F8F5F0]/75 mt-0.5 leading-normal">
+                T1, T1Gd, T2, and FLAIR help the model identify and segment tumor regions accurately.
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            {/* 1. Authoritative Backend Validation Trigger */}
+          {/* Analysis Action Button */}
+          <div className="lg:col-span-4 flex justify-end">
             <button
-              onClick={handleValidateDataset}
-              disabled={!allSelected || isValidating}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-sans font-medium text-xs sm:text-sm tracking-wide transition-all ${
-                allSelected && !isValidating
-                  ? 'bg-[#F3ECE7] hover:bg-[#EAE0D9] text-[#30252A] border border-[#DDD0C8] shadow-xs cursor-pointer'
-                  : 'bg-[#F3ECE7]/50 text-[#8C7C83] border border-[#DDD0C8]/50 cursor-not-allowed opacity-60'
+              onClick={handleContinueAnalysis}
+              disabled={!allUploaded || isProcessing}
+              className={`w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl font-medium text-xs sm:text-sm transition-all duration-300 ${
+                allUploaded && !isProcessing
+                  ? 'bg-[#F8F5F0] text-[#6D263D] hover:bg-white shadow-md cursor-pointer font-semibold'
+                  : 'bg-[#4C1929] text-[#A66E80] border border-[#6B283C] cursor-not-allowed opacity-80'
               }`}
             >
-              {isValidating ? (
+              {isProcessing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin text-[#6D263D]" />
-                  <span>Validating Dataset...</span>
-                </>
-              ) : isFullyValid ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-700" />
-                  <span>Re-Validate Dataset</span>
+                  <span>{analysisStatus === 'uploading' ? `Uploading (${uploadProgress}%)` : 'Inferring 3D...'}</span>
                 </>
               ) : (
                 <>
-                  <FileCheck className="w-4 h-4 text-[#6D263D]" />
-                  <span>Validate MRI Dataset</span>
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Continue to analysis</span>
+                  <span>→</span>
                 </>
               )}
             </button>
-
-            {/* 2. Continue to Viewer (Gated strictly until validation passes) */}
-            <button
-              onClick={handleContinueToViewer}
-              disabled={!isFullyValid || isValidating}
-              className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-7 py-3 rounded-full font-sans font-medium text-xs sm:text-sm tracking-wide transition-all duration-300 ${
-                isFullyValid && !isValidating
-                  ? 'bg-[#6D263D] text-[#F8F5F0] hover:bg-[#581D30] shadow-[0_6px_20px_rgba(109,38,61,0.25)] hover:scale-[1.01] active:scale-[0.99] cursor-pointer font-semibold'
-                  : 'bg-[#DDD0C8] text-[#8C7C83] cursor-not-allowed opacity-60'
-              }`}
-            >
-              <span>Continue to Viewer</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
           </div>
+
         </div>
 
-        {/* ─── 4. Educational & Research Disclaimer ─── */}
-        <div className="pt-2 text-center">
-          <p className="text-[11px] font-mono text-[#8C7C83]">
-            This prototype is for research and educational use only. It is not a diagnostic or clinical decision-making tool.
-          </p>
-        </div>
+        {/* Live Upload Progress Notification */}
+        {analysisStatus === 'uploading' && (
+          <div className="p-4 rounded-xl bg-[#542031] border border-[#8C3A52]/60 space-y-2 text-xs text-[#F8F5F0] animate-in fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Ingesting MRI Sequences via Multipart Stream...
+              </span>
+              <span className="font-mono">{uploadProgress}%</span>
+            </div>
+            <div className="w-full bg-[#441A27] h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-[#F8F5F0] h-full transition-all duration-200"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Live Inference Execution Notification */}
+        {analysisStatus === 'inferring' && (
+          <div className="p-4 rounded-xl bg-[#542031] border border-[#8C3A52]/60 flex items-start gap-3 text-xs text-[#F8F5F0] animate-in fade-in duration-200">
+            <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 mt-0.5 text-cyan-300" />
+            <div>
+              <p className="font-semibold text-[#F8F5F0]">
+                Running 3D Sliding Window Inference...
+              </p>
+              <p className="text-[11px] text-[#F8F5F0]/80 mt-1 leading-relaxed">
+                Preprocessing scans, resampling to isotropic grid, and executing MONAI SegResNet. Results will open in the 3D Workstation automatically.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Honest Backend Connection Error Feedback */}
+        {analysisStatus === 'error' && (
+          <div className="p-4 rounded-xl bg-rose-950/80 border border-rose-800/80 flex flex-col sm:flex-row items-start justify-between gap-4 text-xs text-rose-200 animate-in fade-in duration-200">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-rose-100">
+                  Backend Connection Notice
+                </p>
+                <p className="text-[11px] text-rose-200/90 mt-1 leading-relaxed max-w-xl">
+                  {analysisError}
+                </p>
+                <p className="text-[10px] text-rose-300/70 mt-1 font-mono">
+                  Target: POST http://localhost:8000/api/v1/segment/predict
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
+              <button
+                onClick={handleContinueAnalysis}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-900 text-rose-100 hover:bg-rose-800 border border-rose-700 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Retry</span>
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
     </section>

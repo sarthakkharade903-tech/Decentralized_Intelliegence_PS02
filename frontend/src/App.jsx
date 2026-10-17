@@ -37,9 +37,7 @@ export default function App() {
 
   const handleInferenceSuccess = (result, files = null) => {
     setPredictionData(result);
-    if (files) {
-      setUploadedFiles(files);
-    }
+    if (files) setUploadedFiles(files);
     setIsUploadOpen(false);
     setCurrentPage('workstation');
   };

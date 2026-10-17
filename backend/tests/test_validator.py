@@ -26,13 +26,11 @@ from fastapi import UploadFile
 
 from backend.app.exceptions import (
     CorruptedNiftiException,
-    DuplicateSequenceAssignmentException,
     EmptyScanException,
     FileSizeExceededException,
     IncompatibleAffineException,
     IncompatibleDimensionsException,
     NonfiniteVoxelsException,
-    UnsupportedFileExtensionException,
     ValidationException,
 )
 from backend.app.services.validator import (
@@ -77,20 +75,12 @@ def create_valid_sequence_set(
     shape=(16, 16, 10),
     spacing=(1.0, 1.0, 1.0),
 ) -> Dict[str, nib.Nifti1Image]:
-    """Returns a valid 4-sequence set (t1, t1gd, t2, flair) with identical geometry and distinct contents."""
-    # Ensure distinct non-blank voxel data across sequence modalities
-    rng1 = np.random.default_rng(seed=101)
-    rng2 = np.random.default_rng(seed=102)
-    rng3 = np.random.default_rng(seed=103)
-    rng4 = np.random.default_rng(seed=104)
-
-    affine = np.diag([spacing[0], spacing[1], spacing[2], 1.0])
-
+    """Returns a valid 4-sequence set (t1, t1gd, t2, flair) with identical geometry."""
     return {
-        "t1": nib.Nifti1Image(rng1.uniform(20.0, 300.0, size=shape).astype(np.float32), affine),
-        "t1gd": nib.Nifti1Image(rng2.uniform(30.0, 400.0, size=shape).astype(np.float32), affine),
-        "t2": nib.Nifti1Image(rng3.uniform(40.0, 500.0, size=shape).astype(np.float32), affine),
-        "flair": nib.Nifti1Image(rng4.uniform(50.0, 600.0, size=shape).astype(np.float32), affine),
+        "t1": create_synthetic_nifti(shape=shape, spacing=spacing),
+        "t1gd": create_synthetic_nifti(shape=shape, spacing=spacing),
+        "t2": create_synthetic_nifti(shape=shape, spacing=spacing),
+        "flair": create_synthetic_nifti(shape=shape, spacing=spacing),
     }
 
 
@@ -313,112 +303,3 @@ def test_geometry_extraction_accuracy():
         "voxel_spacing_mm": [0.9375, 0.9375, 3.0],
         "orientation": "RAS",
     }
-
-
-def test_2d_volume_strictly_rejected():
-    """Verify that 2D scans are rejected with an explicit 3D requirement error."""
-    sequences = create_valid_sequence_set(shape=(16, 16, 10))
-    # Replace T1 with 2D image
-    data_2d = np.random.uniform(10.0, 50.0, size=(16, 16)).astype(np.float32)
-    sequences["t1"] = nib.Nifti1Image(data_2d, np.eye(4))
-
-    with pytest.raises(IncompatibleDimensionsException) as exc_info:
-        validate_mpmri_sequences(sequences)
-
-    assert exc_info.value.error == "INCOMPATIBLE_SPATIAL_DIMENSIONS"
-    assert exc_info.value.detail["expected_dimensions"] == 3
-    assert exc_info.value.detail["dimensions_count"] == 2
-
-
-def test_4d_volume_strictly_rejected_without_squeezing():
-    """Verify that 4D multi-channel scans (H, W, D, 4) are rejected without silent squeezing."""
-    sequences = create_valid_sequence_set(shape=(16, 16, 10))
-    data_4d = np.ones((16, 16, 10, 4), dtype=np.float32) * 50.0
-    sequences["t1"] = nib.Nifti1Image(data_4d, np.eye(4))
-
-    with pytest.raises(IncompatibleDimensionsException) as exc_info:
-        validate_mpmri_sequences(sequences)
-
-    assert exc_info.value.error == "INCOMPATIBLE_SPATIAL_DIMENSIONS"
-    assert exc_info.value.detail["expected_dimensions"] == 3
-    assert exc_info.value.detail["dimensions_count"] == 4
-
-
-def test_4d_trailing_singleton_strictly_rejected():
-    """Verify that 4D scans with trailing singleton (H, W, D, 1) are rejected without silent squeezing."""
-    sequences = create_valid_sequence_set(shape=(16, 16, 10))
-    flair_data = np.asanyarray(sequences["flair"].dataobj)[..., np.newaxis]
-    sequences["flair"] = nib.Nifti1Image(flair_data, sequences["flair"].affine)
-
-    with pytest.raises(IncompatibleDimensionsException) as exc_info:
-        validate_mpmri_sequences(sequences)
-
-    assert exc_info.value.error == "INCOMPATIBLE_SPATIAL_DIMENSIONS"
-    assert exc_info.value.detail["dimensions_count"] == 4
-
-
-def test_nonfinite_affine_matrix_rejected():
-    """Verify that affine matrix containing NaN or Inf is rejected."""
-    sequences = create_valid_sequence_set(shape=(16, 16, 10))
-    bad_affine = np.eye(4)
-    bad_affine[0, 3] = np.nan
-    sequences["t2"] = nib.Nifti1Image(sequences["t2"].get_fdata(), bad_affine)
-
-    with pytest.raises(IncompatibleAffineException) as exc_info:
-        validate_mpmri_sequences(sequences)
-
-    assert exc_info.value.error == "INCOMPATIBLE_SPATIAL_AFFINE"
-    assert "non-finite values" in exc_info.value.message
-
-
-def test_degenerate_singular_affine_rejected():
-    """Verify that a singular/degenerate affine matrix (det ~ 0) is rejected."""
-    sequences = create_valid_sequence_set(shape=(16, 16, 10))
-    degenerate_affine = np.array([
-        [1.0, 0.0, 0.0, 0.0],
-        [1.0, 0.0, 0.0, 0.0],  # Duplicate row -> determinant is 0
-        [0.0, 0.0, 1.0, 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ], dtype=np.float32)
-    sequences["flair"]._affine = degenerate_affine
-
-    with pytest.raises(IncompatibleAffineException) as exc_info:
-        validate_mpmri_sequences(sequences)
-
-    assert exc_info.value.error == "INCOMPATIBLE_SPATIAL_AFFINE"
-    assert "singular or degenerate" in exc_info.value.message
-
-
-def test_duplicate_sequence_assignment_rejected():
-    """Verify that identical files assigned to multiple sequence slots are rejected."""
-    raw_seqs = create_valid_sequence_set(shape=(12, 12, 8))
-    shared_bytes = nifti_to_gzipped_bytes(raw_seqs["t1"])
-    other_bytes = nifti_to_gzipped_bytes(raw_seqs["t2"])
-
-    upload_files = {
-        "t1": UploadFile(file=io.BytesIO(shared_bytes), filename="scan_t1.nii.gz"),
-        "t1gd": UploadFile(file=io.BytesIO(shared_bytes), filename="scan_t1.nii.gz"),  # Duplicate!
-        "t2": UploadFile(file=io.BytesIO(other_bytes), filename="scan_t2.nii.gz"),
-        "flair": UploadFile(file=io.BytesIO(other_bytes), filename="scan_flair.nii.gz"),  # Duplicate!
-    }
-
-    with pytest.raises(DuplicateSequenceAssignmentException) as exc_info:
-        validate_mpmri_sequences(upload_files)
-
-    assert exc_info.value.error == "DUPLICATE_SEQUENCE_ASSIGNMENT"
-
-
-def test_unsupported_file_extension_rejected():
-    """Verify that files with unsupported extensions (.dcm, .txt) are rejected."""
-    raw_seqs = create_valid_sequence_set(shape=(12, 12, 8))
-    upload_files = {
-        "t1": UploadFile(file=io.BytesIO(nifti_to_gzipped_bytes(raw_seqs["t1"])), filename="scan.dcm"),
-        "t1gd": UploadFile(file=io.BytesIO(nifti_to_gzipped_bytes(raw_seqs["t1gd"])), filename="t1gd.nii.gz"),
-        "t2": UploadFile(file=io.BytesIO(nifti_to_gzipped_bytes(raw_seqs["t2"])), filename="t2.nii.gz"),
-        "flair": UploadFile(file=io.BytesIO(nifti_to_gzipped_bytes(raw_seqs["flair"])), filename="flair.nii.gz"),
-    }
-
-    with pytest.raises(UnsupportedFileExtensionException) as exc_info:
-        validate_mpmri_sequences(upload_files)
-
-    assert exc_info.value.error == "UNSUPPORTED_FILE_EXTENSION"

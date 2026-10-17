@@ -59,11 +59,6 @@ export default function Brain3D() {
     warmAccent.position.set(2, -2.5, 3);
     scene.add(warmAccent);
 
-    // Restrained scientific violet backlight for anatomical depth
-    const violetBacklight = new THREE.DirectionalLight(0x8b5cf6, 3.2);
-    violetBacklight.position.set(0, 4, -4);
-    scene.add(violetBacklight);
-
     // Internal radiant core light
     const coreLight = new THREE.PointLight(0x22d3ee, 3.5, 6);
     coreLight.position.set(0, 0, 0);
@@ -280,7 +275,6 @@ export default function Brain3D() {
     try {
       dracoLoader = new DRACOLoader();
       dracoLoader.setDecoderPath('/draco/gltf/');
-      dracoLoader.setDecoderConfig({ type: 'js' });
 
       const loader = new GLTFLoader();
       loader.setDRACOLoader(dracoLoader);

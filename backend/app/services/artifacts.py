@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import nibabel as nib
 import numpy as np
@@ -41,23 +41,22 @@ def sanitize_identifier(identifier: str, default: str = "ANONYMOUS") -> str:
 
 def generate_tumor_surface_mesh(
     discrete_mask: np.ndarray,
-    voxel_spacing: Optional[list] = None,
+    voxel_spacing: Optional[Union[List[float], Tuple[float, ...]]] = None,
     step_size: int = 2,
     reference_scan: Optional[np.ndarray] = None,
 ) -> Dict[str, Any]:
-    """Generates Three.js-compatible 3D surface meshes from volumetric segmentation.
+    """Generates real 3D triangle meshes using Marching Cubes for each BraTS region and brain envelope.
 
-    Extracts:
-    1. Sub-tumor components (NETC, ED, ET) using marching cubes with smoothing.
-    2. Optional smooth anatomical brain cortex envelope for visual context.
+    Args:
+        discrete_mask: 3D uint8 array with BraTS labels (0, 1, 2, 4).
+        voxel_spacing: Voxel spacing in mm [sx, sy, sz].
+        step_size: Marching cubes step size (2 is balanced for high detail and speed).
+        reference_scan: Optional 3D intensity array for brain envelope extraction.
 
     Returns:
         Structured dictionary containing mesh vertices, faces, and normals scaled for Three.js.
     """
-    try:
-        from skimage.measure import marching_cubes
-    except ImportError:
-        marching_cubes = None
+    from skimage.measure import marching_cubes
     import scipy.ndimage as ndi
 
     spacing = list(voxel_spacing) if voxel_spacing else [1.0, 1.0, 1.0]
@@ -101,10 +100,6 @@ def generate_tumor_surface_mesh(
     # Scale factor: 80 mm per Three.js world unit gives clean framing with camera at z=4.0
     scale_factor = 80.0
     center_offset = vol_center * np.array(spacing, dtype=np.float32)
-
-    # If marching_cubes is not installed, return structured metadata gracefully
-    if marching_cubes is None:
-        return mesh_payload
 
     # Adapt step size to mask dimensions
     min_dim = min(shape)

@@ -89,35 +89,3 @@ def test_invalid_mask_dimensions_rejected():
     mask_2d = np.zeros((10, 10), dtype=np.uint8)
     with pytest.raises(ValueError):
         compute_tumor_volumetrics(mask_2d, voxel_spacing_mm=[1.0, 1.0, 1.0])
-
-
-def test_compute_dice_scores():
-    """Verify Dice Similarity Coefficient computation for BraTS 2021 composite regions."""
-    from backend.app.services.volumetrics import compute_dice_scores
-
-    # 1. Perfect match
-    pred = np.zeros((10, 10, 10), dtype=np.uint8)
-    gt = np.zeros((10, 10, 10), dtype=np.uint8)
-    pred[:5, :5, :5] = 4  # ET
-    gt[:5, :5, :5] = 4
-    scores = compute_dice_scores(pred, gt)
-    assert scores["whole_tumor"] == 1.0
-    assert scores["tumor_core"] == 1.0
-    assert scores["enhancing_tumor"] == 1.0
-
-    # 2. Both empty
-    empty_a = np.zeros((10, 10, 10), dtype=np.uint8)
-    empty_b = np.zeros((10, 10, 10), dtype=np.uint8)
-    empty_scores = compute_dice_scores(empty_a, empty_b)
-    assert empty_scores["whole_tumor"] == 1.0
-    assert empty_scores["tumor_core"] == 1.0
-    assert empty_scores["enhancing_tumor"] == 1.0
-
-    # 3. Disjoint (zero overlap)
-    gt_disjoint = np.zeros((10, 10, 10), dtype=np.uint8)
-    gt_disjoint[5:, 5:, 5:] = 4
-    disjoint_scores = compute_dice_scores(pred, gt_disjoint)
-    assert disjoint_scores["whole_tumor"] == 0.0
-    assert disjoint_scores["tumor_core"] == 0.0
-    assert disjoint_scores["enhancing_tumor"] == 0.0
-

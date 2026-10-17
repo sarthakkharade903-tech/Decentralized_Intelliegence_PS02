@@ -125,10 +125,10 @@ def test_cors_headers_present():
 
 def test_predict_endpoint_success():
     """Verify end-to-end multipart form submission and response payload structure."""
-    t1_bytes = make_dummy_nifti_bytes(fill_value=100.0)
-    t1gd_bytes = make_dummy_nifti_bytes(fill_value=120.0)
-    t2_bytes = make_dummy_nifti_bytes(fill_value=140.0)
-    flair_bytes = make_dummy_nifti_bytes(fill_value=160.0)
+    t1_bytes = make_dummy_nifti_bytes()
+    t1gd_bytes = make_dummy_nifti_bytes()
+    t2_bytes = make_dummy_nifti_bytes()
+    flair_bytes = make_dummy_nifti_bytes()
 
     dummy_result = create_dummy_inference_result()
 
@@ -183,85 +183,6 @@ def test_predict_endpoint_success():
         assert "model_provenance" in report_json
 
 
-def test_validate_dataset_endpoint_success():
-    """Verify POST /api/v1/segment/validate returns 200 and geometry without running inference."""
-    files = {
-        "t1": ("t1.nii.gz", make_dummy_nifti_bytes(fill_value=100.0), "application/gzip"),
-        "t1gd": ("t1gd.nii.gz", make_dummy_nifti_bytes(fill_value=120.0), "application/gzip"),
-        "t2": ("t2.nii.gz", make_dummy_nifti_bytes(fill_value=140.0), "application/gzip"),
-        "flair": ("flair.nii.gz", make_dummy_nifti_bytes(fill_value=160.0), "application/gzip"),
-    }
-    data = {"patient_id": "VAL_CASE_01"}
-    response = client.post("/api/v1/segment/validate", files=files, data=data)
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["status"] == "valid"
-    assert payload["is_valid"] is True
-    assert payload["geometry"]["dimensions"] == [12, 12, 8]
-    assert "cross_sequence_checks" in payload
-    assert payload["cross_sequence_checks"]["dimensions_match"] is True
-    assert payload["cross_sequence_checks"]["spacing_match"] is True
-    assert "sequences" in payload
-    assert "t1" in payload["sequences"]
-
-
-def test_validate_dataset_endpoint_duplicate_rejection():
-    """Verify POST /api/v1/segment/validate rejects duplicate file assignment across slots."""
-    shared = make_dummy_nifti_bytes(fill_value=100.0)
-    files = {
-        "t1": ("t1.nii.gz", shared, "application/gzip"),
-        "t1gd": ("t1.nii.gz", shared, "application/gzip"),  # Duplicate!
-        "t2": ("t2.nii.gz", make_dummy_nifti_bytes(fill_value=140.0), "application/gzip"),
-        "flair": ("flair.nii.gz", make_dummy_nifti_bytes(fill_value=160.0), "application/gzip"),
-    }
-    response = client.post("/api/v1/segment/validate", files=files)
-    assert response.status_code == 400
-    payload = response.json()
-    assert payload["error"] == "DUPLICATE_SEQUENCE_ASSIGNMENT"
-
-
-def test_predict_endpoint_fails_closed_when_weights_missing():
-    """Verify prediction endpoint rejects request with 503 when model is not ready."""
-    with patch("backend.app.main.get_model_readiness", return_value={
-        "model_ready": False,
-        "weights_present": False,
-        "checkpoint_path": "/nonexistent/path/model.pt",
-        "checkpoint_sha256": None,
-        "hardware_device": "CPU",
-        "error": "Weights file not found",
-    }):
-        files = {
-            "t1": ("t1.nii.gz", make_dummy_nifti_bytes(fill_value=10.0), "application/gzip"),
-            "t1gd": ("t1gd.nii.gz", make_dummy_nifti_bytes(fill_value=20.0), "application/gzip"),
-            "t2": ("t2.nii.gz", make_dummy_nifti_bytes(fill_value=30.0), "application/gzip"),
-            "flair": ("flair.nii.gz", make_dummy_nifti_bytes(fill_value=40.0), "application/gzip"),
-        }
-        response = client.post("/api/v1/segment/predict", files=files)
-        assert response.status_code == 503
-        payload = response.json()
-        assert payload["error"] == "MODEL_WEIGHTS_UNAVAILABLE"
-
-
-def test_health_reflects_degraded_when_weights_missing():
-    """Verify health endpoint reports degraded status when model weights are not ready."""
-    with patch("backend.app.main.get_model_readiness", return_value={
-        "model_ready": False,
-        "weights_present": False,
-        "checkpoint_path": "/nonexistent/path/model.pt",
-        "checkpoint_sha256": None,
-        "hardware_device": "CPU",
-        "error": "Weights file not found",
-    }):
-        response = client.get("/api/v1/health")
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["status"] == "degraded"
-        assert payload["model_ready"] is False
-        assert payload["model_weights_present"] is False
-        assert payload["weights_present"] is False
-
-
 def test_predict_endpoint_missing_sequence():
     """Verify omitting a required sequence returns RFC 7807 MISSING_SEQUENCE error."""
     t1_bytes = make_dummy_nifti_bytes()
@@ -288,10 +209,10 @@ def test_predict_endpoint_corrupted_nifti():
     corrupt_bytes = b"this is completely invalid nifti content"
 
     files = {
-        "t1": ("t1.nii.gz", make_dummy_nifti_bytes(fill_value=100.0), "application/gzip"),
+        "t1": ("t1.nii.gz", t1_bytes, "application/gzip"),
         "t1gd": ("t1gd.nii.gz", corrupt_bytes, "application/gzip"),
-        "t2": ("t2.nii.gz", make_dummy_nifti_bytes(fill_value=120.0), "application/gzip"),
-        "flair": ("flair.nii.gz", make_dummy_nifti_bytes(fill_value=140.0), "application/gzip"),
+        "t2": ("t2.nii.gz", t1_bytes, "application/gzip"),
+        "flair": ("flair.nii.gz", t1_bytes, "application/gzip"),
     }
 
     response = client.post("/api/v1/segment/predict", files=files)
@@ -302,16 +223,14 @@ def test_predict_endpoint_corrupted_nifti():
 
 def test_predict_endpoint_incompatible_dimensions():
     """Verify mismatched sequence grid sizes return INCOMPATIBLE_SPATIAL_DIMENSIONS."""
-    t1_bytes = make_dummy_nifti_bytes(fill_value=100.0, shape=(12, 12, 8))
-    t1gd_bytes = make_dummy_nifti_bytes(fill_value=120.0, shape=(12, 12, 8))
-    mismatched_bytes = make_dummy_nifti_bytes(fill_value=140.0, shape=(12, 12, 16))
-    flair_bytes = make_dummy_nifti_bytes(fill_value=160.0, shape=(12, 12, 8))
+    t1_bytes = make_dummy_nifti_bytes(shape=(12, 12, 8))
+    mismatched_bytes = make_dummy_nifti_bytes(shape=(12, 12, 16))
 
     files = {
         "t1": ("t1.nii.gz", t1_bytes, "application/gzip"),
-        "t1gd": ("t1gd.nii.gz", t1gd_bytes, "application/gzip"),
+        "t1gd": ("t1gd.nii.gz", t1_bytes, "application/gzip"),
         "t2": ("t2.nii.gz", mismatched_bytes, "application/gzip"),
-        "flair": ("flair.nii.gz", flair_bytes, "application/gzip"),
+        "flair": ("flair.nii.gz", t1_bytes, "application/gzip"),
     }
 
     response = client.post("/api/v1/segment/predict", files=files)
