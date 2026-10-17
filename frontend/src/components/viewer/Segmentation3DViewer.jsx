@@ -32,7 +32,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   UploadCloud,
-  Check
+  Check,
+  Scissors,
+  Grid,
+  Target
 } from 'lucide-react';
 
 /**
@@ -65,6 +68,8 @@ export default function Segmentation3DViewer({
   const animFrameIdRef = useRef(null);
   const raycasterRef = useRef(new THREE.Raycaster());
   const mousePosRef = useRef(new THREE.Vector2(-1000, -1000));
+  const cameraTargetRef = useRef(null);
+  const hoveredMeshRef = useRef(null);
 
   // Mesh and scene object references
   const meshesRef = useRef({
@@ -73,6 +78,9 @@ export default function Segmentation3DViewer({
     et: null,
     boxHelper: null,
     axesHelper: null,
+    centroidBeacon: null,
+    groundGrid: null,
+    planeHelper: null,
     tumorGroup: null,
     brainGroup: null,
     previewGroup: null
@@ -85,6 +93,10 @@ export default function Segmentation3DViewer({
   const [isWireframe, setIsWireframe] = useState(false);
   const [showBoundingBox, setShowBoundingBox] = useState(false);
   const [showAxes, setShowAxes] = useState(false);
+  const [showGroundGrid, setShowGroundGrid] = useState(true);
+  const [showCentroidBeacon, setShowCentroidBeacon] = useState(true);
+  const [slicerMode, setSlicerMode] = useState('none'); // 'none' | 'axial' | 'coronal' | 'sagittal'
+  const [slicerPosition, setSlicerPosition] = useState(0); // mm [-75, 75]
 
   // Brain Project UI States
   const [activeTab, setActiveTab] = useState('explore'); // 'explore' | 'systems' | 'tumor'
@@ -207,6 +219,19 @@ export default function Segmentation3DViewer({
   }, []);
 
   // --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // Camera Smooth Cinematic Fly-To Helper
+  // --------------------------------------------------------------------------
+  const smoothFlyTo = useCallback((targetPos, targetLookAt = [0, 0, 0], speed = 0.06) => {
+    if (!cameraRef.current || !controlsRef.current) return;
+    cameraTargetRef.current = {
+      pos: new THREE.Vector3(...targetPos),
+      lookAt: new THREE.Vector3(...targetLookAt),
+      speed
+    };
+  }, []);
+
+  // --------------------------------------------------------------------------
   // Setup Three.js Scene, Camera, Lights, OrbitControls, and Raycasting
   // --------------------------------------------------------------------------
   useEffect(() => {
@@ -227,7 +252,7 @@ export default function Segmentation3DViewer({
     camera.up.set(0, 0, 1);
     cameraRef.current = camera;
 
-    // 3. WebGL Renderer
+    // 3. WebGL Renderer with High-Precision Tone Mapping
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
@@ -236,7 +261,7 @@ export default function Segmentation3DViewer({
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = 1.15;
     rendererRef.current = renderer;
 
     container.innerHTML = '';
@@ -265,23 +290,31 @@ export default function Segmentation3DViewer({
     meshesRef.current.brainGroup = brainGroup;
 
     // 6. Clinical & Designed Stage Lighting System (Matching Brain Project scene.js)
-    scene.add(new THREE.HemisphereLight(0xc6d2ff, 0x14171f, 0.5));
+    scene.add(new THREE.HemisphereLight(0xdbe8fb, 0x141b24, 0.75));
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.15);
-    keyLight.position.set(100, 160, 180);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    keyLight.position.set(110, 160, 180);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xaebfff, 0.45);
+    const fillLight = new THREE.DirectionalLight(0x9cc3ff, 0.6);
     fillLight.position.set(-150, 25, 80);
     scene.add(fillLight);
 
-    const rimLight1 = new THREE.DirectionalLight(0x8ee0ff, 0.85);
+    const rimLight1 = new THREE.DirectionalLight(0x38bdf8, 1.2);
     rimLight1.position.set(-80, 80, -180);
     scene.add(rimLight1);
 
-    const rimLight2 = new THREE.DirectionalLight(0xff9bb6, 0.4);
+    const rimLight2 = new THREE.DirectionalLight(0xf43f5e, 0.55);
     rimLight2.position.set(120, -50, -150);
     scene.add(rimLight2);
+
+    // Stereotaxic Coordinate Floor Grid (Polar rings with coordinate scale ticks)
+    const floorGrid = new THREE.PolarGridHelper(130, 8, 4, 64, 0x1e293b, 0x0f172a);
+    floorGrid.position.set(0, 0, -82);
+    floorGrid.rotation.x = Math.PI / 2;
+    floorGrid.visible = showGroundGrid;
+    scene.add(floorGrid);
+    meshesRef.current.groundGrid = floorGrid;
 
     // 7. Load 3D Anatomical Brain Model (brain.glb) asynchronously
     const loaderHandle = loadAnatomicalBrainModel({
@@ -297,7 +330,7 @@ export default function Segmentation3DViewer({
       }
     });
 
-    // 8. Raycasting Pointer Move Handler
+    // 8. Raycasting Pointer Move Handler & Dynamic Mesh Hover Glow
     const handlePointerMove = (e) => {
       if (!container || !renderer) return;
       const rect = container.getBoundingClientRect();
@@ -317,7 +350,27 @@ export default function Segmentation3DViewer({
             (h) => h.object?.userData?.anatomicalLabel || h.object?.userData?.tumorLabel
           );
           if (firstHit) {
-            const data = firstHit.object.userData;
+            const hitMesh = firstHit.object;
+            if (hoveredMeshRef.current !== hitMesh) {
+              if (hoveredMeshRef.current && hoveredMeshRef.current.material) {
+                if (hoveredMeshRef.current.userData._origIntensity !== undefined) {
+                  hoveredMeshRef.current.material.emissiveIntensity =
+                    hoveredMeshRef.current.userData._origIntensity;
+                }
+              }
+
+              if (hitMesh.material && hitMesh.material.emissive) {
+                if (!hitMesh.userData._isCloned) {
+                  hitMesh.material = hitMesh.material.clone();
+                  hitMesh.userData._isCloned = true;
+                }
+                hitMesh.userData._origIntensity = hitMesh.material.emissiveIntensity ?? 0.25;
+                hitMesh.material.emissiveIntensity = Math.min(1.2, hitMesh.userData._origIntensity + 0.6);
+              }
+              hoveredMeshRef.current = hitMesh;
+            }
+
+            const data = hitMesh.userData;
             setHoveredStructure({
               label: data.anatomicalLabel || data.tumorLabel || 'Brain Tissue',
               category: data.anatomicalCategory || data.tumorRegion || 'Anatomy',
@@ -328,11 +381,70 @@ export default function Segmentation3DViewer({
             return;
           }
         }
+
+        // No hits: restore previous hover highlight
+        if (hoveredMeshRef.current && hoveredMeshRef.current.material) {
+          if (hoveredMeshRef.current.userData._origIntensity !== undefined) {
+            hoveredMeshRef.current.material.emissiveIntensity =
+              hoveredMeshRef.current.userData._origIntensity;
+          }
+          hoveredMeshRef.current = null;
+        }
         setHoveredStructure(null);
       }
     };
 
+    // Pointer Click Handler (Direct 3D click selection & auto-focus)
+    let pointerDownTime = 0;
+    const handlePointerDown = () => {
+      pointerDownTime = Date.now();
+    };
+
+    const handlePointerUp = (e) => {
+      if (Date.now() - pointerDownTime > 250) return; // Ignore drag
+      if (!container || !renderer || !cameraRef.current) return;
+
+      const rect = container.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+      mousePosRef.current.set(x, y);
+
+      raycasterRef.current.setFromCamera(mousePosRef.current, cameraRef.current);
+      const intersectable = [];
+      if (tumorGroup) intersectable.push(...tumorGroup.children);
+      if (brainGroup) intersectable.push(...brainGroup.children);
+
+      const hits = raycasterRef.current.intersectObjects(intersectable, true);
+      if (hits.length > 0) {
+        const firstHit = hits.find(
+          (h) => h.object?.userData?.anatomicalLabel || h.object?.userData?.tumorLabel
+        );
+        if (firstHit) {
+          const data = firstHit.object.userData;
+          const label = data.anatomicalLabel || data.tumorLabel;
+          const id = data.anatomicalId;
+          const side = data.anatomicalSide;
+          const cat = data.anatomicalCategory || data.tumorRegion;
+
+          setSelectedStructure({
+            id: id || label,
+            label,
+            category: cat,
+            side
+          });
+
+          // Smoothly glide camera toward the clicked structure
+          const hitPoint = firstHit.point;
+          const dir = cameraRef.current.position.clone().sub(controls.target).normalize();
+          const targetCamPos = hitPoint.clone().add(dir.multiplyScalar(105));
+          smoothFlyTo([targetCamPos.x, targetCamPos.y, targetCamPos.z], [hitPoint.x, hitPoint.y, hitPoint.z], 0.08);
+        }
+      }
+    };
+
     container.addEventListener('pointermove', handlePointerMove);
+    container.addEventListener('pointerdown', handlePointerDown);
+    container.addEventListener('pointerup', handlePointerUp);
 
     // 9. Resize Handler
     const handleResize = () => {
@@ -345,11 +457,24 @@ export default function Segmentation3DViewer({
     };
     window.addEventListener('resize', handleResize);
 
-    // 10. Animation Loop
+    // 10. Animation Loop with Smooth Camera Lerp
     let isCancelled = false;
     const animate = () => {
       if (isCancelled) return;
       animFrameIdRef.current = requestAnimationFrame(animate);
+
+      // Smooth camera transition if target is pending
+      if (cameraTargetRef.current && camera && controls) {
+        const { pos, lookAt, speed = 0.06 } = cameraTargetRef.current;
+        camera.position.lerp(pos, speed);
+        controls.target.lerp(lookAt, speed);
+        if (camera.position.distanceTo(pos) < 0.3 && controls.target.distanceTo(lookAt) < 0.3) {
+          camera.position.copy(pos);
+          controls.target.copy(lookAt);
+          cameraTargetRef.current = null;
+        }
+      }
+
       controls.update();
       renderer.render(scene, camera);
     };
@@ -360,9 +485,12 @@ export default function Segmentation3DViewer({
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
       window.removeEventListener('resize', handleResize);
       container.removeEventListener('pointermove', handlePointerMove);
+      container.removeEventListener('pointerdown', handlePointerDown);
+      container.removeEventListener('pointerup', handlePointerUp);
       loaderHandle.abort();
       controls.dispose();
       cleanupTumorMeshes();
+      if (floorGrid) scene.remove(floorGrid);
       if (brainGroup) scene.remove(brainGroup);
       renderer.dispose();
       if (renderer.domElement && renderer.domElement.parentNode) {
@@ -373,7 +501,7 @@ export default function Segmentation3DViewer({
       rendererRef.current = null;
       controlsRef.current = null;
     };
-  }, [cleanupTumorMeshes]);
+  }, [cleanupTumorMeshes, showGroundGrid, smoothFlyTo]);
 
   // Auto-rotate synchronization
   useEffect(() => {
@@ -433,9 +561,13 @@ export default function Segmentation3DViewer({
   // --------------------------------------------------------------------------
   // Helper: Create Calibrated 3D Preview Lesion from Case Telemetry
   // --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // Helper: Create Calibrated 3D Preview Lesion from Case Telemetry
+  // --------------------------------------------------------------------------
   const buildPreviewLesion = useCallback((tumorGroup, targetCentroid = [28.4, 18.2, 14.6]) => {
     const preview = new THREE.Group();
     preview.name = 'ReferencePreviewLesion';
+    preview.position.set(targetCentroid[0], targetCentroid[1], targetCentroid[2]);
 
     const dims = telemetry.dimensionsMm || [44.0, 36.0, 32.0];
     const rx = dims[0] / 2;
@@ -445,15 +577,17 @@ export default function Segmentation3DViewer({
     // 1. ED Shell (Peritumoral Edema - Amber #EAB308)
     const edGeo = new THREE.SphereGeometry(1.0, 32, 32);
     edGeo.scale(rx, ry, rz);
-    const edMat = new THREE.MeshStandardMaterial({
+    const edMat = new THREE.MeshPhysicalMaterial({
       color: 0xeab308,
-      emissive: 0xca8a04,
-      emissiveIntensity: 0.25,
+      emissive: 0xb45309,
+      emissiveIntensity: 0.22,
       roughness: 0.45,
       metalness: 0.05,
+      clearcoat: 0.3,
       transparent: true,
       opacity: Math.min(0.55, overlayOpacity * 0.45),
-      wireframe: isWireframe
+      wireframe: isWireframe,
+      depthWrite: false
     });
     const edMesh = new THREE.Mesh(edGeo, edMat);
     edMesh.visible = showED;
@@ -467,14 +601,17 @@ export default function Segmentation3DViewer({
     // 2. ET Shell (Enhancing Margin - Vivid Rose #EF4444)
     const etGeo = new THREE.SphereGeometry(1.0, 32, 32);
     etGeo.scale(rx * 0.72, ry * 0.72, rz * 0.72);
-    const etMat = new THREE.MeshStandardMaterial({
+    const etMat = new THREE.MeshPhysicalMaterial({
       color: 0xef4444,
       emissive: 0xdc2626,
-      emissiveIntensity: 0.45,
-      roughness: 0.25,
+      emissiveIntensity: 0.7,
+      roughness: 0.2,
       metalness: 0.15,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.15,
+      transmission: 0.05,
       transparent: true,
-      opacity: Math.min(0.92, overlayOpacity + 0.1),
+      opacity: Math.min(0.96, overlayOpacity + 0.15),
       wireframe: isWireframe
     });
     const etMesh = new THREE.Mesh(etGeo, etMat);
@@ -489,12 +626,14 @@ export default function Segmentation3DViewer({
     // 3. NETC Shell (Necrotic Core - Cyan #06B6D4)
     const netcGeo = new THREE.SphereGeometry(1.0, 28, 28);
     netcGeo.scale(rx * 0.48, ry * 0.48, rz * 0.48);
-    const netcMat = new THREE.MeshStandardMaterial({
+    const netcMat = new THREE.MeshPhysicalMaterial({
       color: 0x06b6d4,
       emissive: 0x0891b2,
-      emissiveIntensity: 0.35,
-      roughness: 0.35,
+      emissiveIntensity: 0.55,
+      roughness: 0.25,
       metalness: 0.1,
+      clearcoat: 0.8,
+      clearcoatRoughness: 0.2,
       transparent: true,
       opacity: Math.min(0.95, overlayOpacity + 0.15),
       wireframe: isWireframe
@@ -508,7 +647,26 @@ export default function Segmentation3DViewer({
     };
     preview.add(netcMesh);
 
-    // 4. Caliper Box & Axes
+    // 4. Centroid Beacon Marker
+    const beaconGeo = new THREE.SphereGeometry(2.5, 16, 16);
+    const beaconMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.95,
+      roughness: 0.2,
+      metalness: 0.1
+    });
+    const beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
+    beaconMesh.name = 'TumorCentroidBeacon';
+    beaconMesh.userData = {
+      tumorLabel: 'Tumor Centroid (Stereotaxic RAS+)',
+      tumorRegion: 'Centroid',
+      tumorColor: '#38bdf8'
+    };
+    beaconMesh.visible = showCentroidBeacon;
+    preview.add(beaconMesh);
+
+    // 5. Caliper Box & Axes
     const boxGeo = new THREE.BoxGeometry(dims[0], dims[1], dims[2]);
     const boxEdges = new THREE.EdgesGeometry(boxGeo);
     const boxMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.35 });
@@ -527,6 +685,7 @@ export default function Segmentation3DViewer({
     meshesRef.current.et = etMesh;
     meshesRef.current.boxHelper = boxHelper;
     meshesRef.current.axesHelper = axesHelper;
+    meshesRef.current.centroidBeacon = beaconMesh;
     meshesRef.current.previewGroup = preview;
 
     setMetrics({
@@ -548,7 +707,8 @@ export default function Segmentation3DViewer({
     showET,
     showNETC,
     showBoundingBox,
-    showAxes
+    showAxes,
+    showCentroidBeacon
   ]);
 
   // --------------------------------------------------------------------------
@@ -606,12 +766,14 @@ export default function Segmentation3DViewer({
         });
 
         if (netcGeo) {
-          const netcMat = new THREE.MeshStandardMaterial({
+          const netcMat = new THREE.MeshPhysicalMaterial({
             color: 0x06b6d4,
             emissive: 0x0891b2,
-            emissiveIntensity: 0.35,
-            roughness: 0.35,
+            emissiveIntensity: 0.55,
+            roughness: 0.25,
             metalness: 0.1,
+            clearcoat: 0.8,
+            clearcoatRoughness: 0.2,
             transparent: true,
             opacity: Math.min(1.0, overlayOpacity + 0.15),
             wireframe: isWireframe
@@ -640,15 +802,17 @@ export default function Segmentation3DViewer({
         });
 
         if (edGeo) {
-          const edMat = new THREE.MeshStandardMaterial({
+          const edMat = new THREE.MeshPhysicalMaterial({
             color: 0xeab308,
-            emissive: 0xca8a04,
-            emissiveIntensity: 0.25,
+            emissive: 0xb45309,
+            emissiveIntensity: 0.2,
             roughness: 0.45,
             metalness: 0.05,
+            clearcoat: 0.3,
             transparent: true,
             opacity: Math.min(0.65, overlayOpacity * 0.45),
-            wireframe: isWireframe
+            wireframe: isWireframe,
+            depthWrite: false
           });
           edMesh = new THREE.Mesh(edGeo, edMat);
           edMesh.visible = showED;
@@ -674,12 +838,15 @@ export default function Segmentation3DViewer({
         });
 
         if (etGeo) {
-          const etMat = new THREE.MeshStandardMaterial({
+          const etMat = new THREE.MeshPhysicalMaterial({
             color: 0xef4444,
             emissive: 0xdc2626,
-            emissiveIntensity: 0.45,
-            roughness: 0.25,
+            emissiveIntensity: 0.7,
+            roughness: 0.2,
             metalness: 0.15,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.15,
+            transmission: 0.05,
             transparent: true,
             opacity: Math.min(1.0, overlayOpacity + 0.2),
             wireframe: isWireframe
@@ -694,6 +861,25 @@ export default function Segmentation3DViewer({
           tumorGroup.add(etMesh);
         }
       }
+
+      // Centroid Beacon
+      const beaconGeo = new THREE.SphereGeometry(2.5, 16, 16);
+      const beaconMat = new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        emissive: 0x0284c7,
+        emissiveIntensity: 0.95,
+        roughness: 0.2,
+        metalness: 0.1
+      });
+      const beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
+      beaconMesh.name = 'TumorCentroidBeacon';
+      beaconMesh.userData = {
+        tumorLabel: 'Tumor Centroid (Stereotaxic RAS+)',
+        tumorRegion: 'Centroid',
+        tumorColor: '#38bdf8'
+      };
+      beaconMesh.visible = showCentroidBeacon;
+      tumorGroup.add(beaconMesh);
 
       // Caliper box
       const box = new THREE.Box3().setFromObject(tumorGroup);
@@ -721,6 +907,7 @@ export default function Segmentation3DViewer({
       meshesRef.current.et = etMesh;
       meshesRef.current.boxHelper = boxHelper;
       meshesRef.current.axesHelper = axesHelper;
+      meshesRef.current.centroidBeacon = beaconMesh;
 
       setMetrics({
         netcVoxels: netcBounds.count,
@@ -757,7 +944,8 @@ export default function Segmentation3DViewer({
     showED,
     showET,
     showBoundingBox,
-    showAxes
+    showAxes,
+    showCentroidBeacon
   ]);
 
   useEffect(() => {
@@ -803,10 +991,57 @@ export default function Segmentation3DViewer({
   }, [isWireframe]);
 
   useEffect(() => {
-    const { boxHelper, axesHelper } = meshesRef.current;
+    const { boxHelper, axesHelper, centroidBeacon, groundGrid } = meshesRef.current;
     if (boxHelper) boxHelper.visible = showBoundingBox;
     if (axesHelper) axesHelper.visible = showAxes;
-  }, [showBoundingBox, showAxes]);
+    if (centroidBeacon) centroidBeacon.visible = showCentroidBeacon;
+    if (groundGrid) groundGrid.visible = showGroundGrid;
+  }, [showBoundingBox, showAxes, showCentroidBeacon, showGroundGrid]);
+
+  // --------------------------------------------------------------------------
+  // Synchronize 3D Multiplanar Cutaway Slicer
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    if (!renderer || !scene) return;
+
+    if (slicerMode === 'none') {
+      renderer.clippingPlanes = [];
+      renderer.localClippingEnabled = false;
+      if (meshesRef.current.planeHelper) {
+        scene.remove(meshesRef.current.planeHelper);
+        if (meshesRef.current.planeHelper.geometry) meshesRef.current.planeHelper.geometry.dispose();
+        meshesRef.current.planeHelper = null;
+      }
+      return;
+    }
+
+    renderer.localClippingEnabled = true;
+
+    let normal = new THREE.Vector3(0, 0, -1);
+    if (slicerMode === 'axial') {
+      normal = new THREE.Vector3(0, 0, -1);
+    } else if (slicerMode === 'coronal') {
+      normal = new THREE.Vector3(0, -1, 0);
+    } else if (slicerMode === 'sagittal') {
+      normal = new THREE.Vector3(-1, 0, 0);
+    }
+
+    const plane = new THREE.Plane(normal, slicerPosition);
+    renderer.clippingPlanes = [plane];
+
+    // Manage plane cutting helper
+    if (meshesRef.current.planeHelper) {
+      scene.remove(meshesRef.current.planeHelper);
+      if (meshesRef.current.planeHelper.geometry) meshesRef.current.planeHelper.geometry.dispose();
+    }
+    const helper = new THREE.PlaneHelper(plane, 175, 0x06b6d4);
+    helper.material.transparent = true;
+    helper.material.opacity = 0.35;
+    scene.add(helper);
+    meshesRef.current.planeHelper = helper;
+  }, [slicerMode, slicerPosition]);
 
   // --------------------------------------------------------------------------
   // Preset Selection Handler (Matching Brain Project PRESETS)
@@ -828,10 +1063,17 @@ export default function Segmentation3DViewer({
     // 2. Set cortex opacity
     setCortexOpacity(preset.cortex);
 
-    // 3. Reset camera focus
-    if (controlsRef.current && cameraRef.current) {
-      controlsRef.current.target.set(0, 0, 0);
-      controlsRef.current.update();
+    // 3. Smooth cinematic camera position for this preset
+    if (presetId === 'cow' || presetId === 'vasc') {
+      smoothFlyTo([40, -110, -50], [0, 0, -15]);
+    } else if (presetId === 'nerves') {
+      smoothFlyTo([25, -95, -35], [0, 0, -20]);
+    } else if (presetId === 'vent') {
+      smoothFlyTo([110, 60, 45], [0, 0, 5]);
+    } else if (presetId === 'whole') {
+      smoothFlyTo([130, 85, 140], [0, 0, 0]);
+    } else {
+      smoothFlyTo([115, 75, 95], [0, 0, 0]);
     }
   };
 
@@ -839,14 +1081,28 @@ export default function Segmentation3DViewer({
   // Camera View & Reset
   // --------------------------------------------------------------------------
   const handleResetView = () => {
-    if (!cameraRef.current || !controlsRef.current) return;
-    cameraRef.current.position.set(130, 85, 140);
-    cameraRef.current.up.set(0, 0, 1);
-    controlsRef.current.target.set(0, 0, 0);
-    controlsRef.current.update();
+    smoothFlyTo([130, 85, 140], [0, 0, 0], 0.08);
     setIsolatedId(null);
     setSelectedStructure(null);
+    setSlicerMode('none');
     applyPreset('whole');
+  };
+
+  // --------------------------------------------------------------------------
+  // Focus Lesion in Frosted X-Ray Mode
+  // --------------------------------------------------------------------------
+  const handleFocusTumorXRay = () => {
+    setCortexOpacity(0.18);
+    setActiveCategories((prev) => ({
+      ...prev,
+      cortex: true,
+      ventricles: true,
+      deep_grey: true,
+      white_matter: false
+    }));
+    const c = metrics.centroidMm || telemetry.centroidMm || [28.4, 18.2, 14.6];
+    const targetCamPos = [c[0] + 75, c[1] + 55, c[2] + 45];
+    smoothFlyTo(targetCamPos, c, 0.07);
   };
 
   // Handle Share button click
@@ -1049,6 +1305,59 @@ export default function Segmentation3DViewer({
                   </div>
                 </div>
 
+                {/* 3D Cutaway Slicer (Multiplanar Cross-Section) */}
+                <div className="space-y-1.5 pt-1 border-t border-slate-200">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-800 flex items-center gap-1">
+                      <Scissors className="w-3.5 h-3.5 text-cyan-600" />
+                      <span>3D Cutaway Slicer</span>
+                    </span>
+                    {slicerMode !== 'none' && (
+                      <span className="font-mono text-[10px] text-cyan-700 font-bold">
+                        {slicerMode.toUpperCase()}: {slicerPosition > 0 ? `+${slicerPosition}` : slicerPosition} mm
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center p-0.5 rounded-xl bg-slate-200/80 text-[11px]">
+                    {[
+                      { id: 'none', label: 'Off' },
+                      { id: 'axial', label: 'Axial' },
+                      { id: 'coronal', label: 'Coronal' },
+                      { id: 'sagittal', label: 'Sagittal' }
+                    ].map((mode) => (
+                      <button
+                        key={mode.id}
+                        onClick={() => setSlicerMode(mode.id)}
+                        className={`flex-1 py-1 rounded-lg transition-all cursor-pointer font-medium ${
+                          slicerMode === mode.id
+                            ? 'bg-white text-slate-900 font-semibold shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                  {slicerMode !== 'none' && (
+                    <div className="pt-0.5 space-y-1">
+                      <input
+                        type="range"
+                        min="-75"
+                        max="75"
+                        step="1"
+                        value={slicerPosition}
+                        onChange={(e) => setSlicerPosition(parseInt(e.target.value, 10))}
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-cyan-600"
+                      />
+                      <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                        <span>-75 mm</span>
+                        <span>0 mm (Center)</span>
+                        <span>+75 mm</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Cortex Opacity Slider */}
                 <div className="space-y-1 pt-1 border-t border-slate-200">
                   <div className="flex items-center justify-between text-xs">
@@ -1129,6 +1438,15 @@ export default function Segmentation3DViewer({
                     <span>{patientCase?.patient_id || 'BraTS2021_00001'}</span>
                   </div>
                 </div>
+
+                {/* Focus Lesion (X-Ray Mode) Quick Action */}
+                <button
+                  onClick={handleFocusTumorXRay}
+                  className="w-full py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                >
+                  <Target className="w-3.5 h-3.5" />
+                  <span>Focus Lesion (X-Ray Mode)</span>
+                </button>
 
                 {/* Physical Volumes in mL */}
                 <div className="space-y-1.5">
@@ -1237,15 +1555,15 @@ export default function Segmentation3DViewer({
                   </div>
                 )}
 
-                {/* Display Options: Wireframe, Caliper Box, Axes */}
+                {/* Display Options: Wireframe, Caliper Box, Axes, Centroid Beacon */}
                 <div className="space-y-1 pt-1">
                   <div className="text-[10px] font-bold tracking-wider text-slate-500 uppercase">
                     Display Overlays
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <button
                       onClick={() => setIsWireframe(!isWireframe)}
-                      className={`flex-1 py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
+                      className={`py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
                         isWireframe ? 'bg-cyan-100 text-cyan-800 border-cyan-400' : 'bg-slate-100 text-slate-600 border-slate-200'
                       }`}
                     >
@@ -1253,7 +1571,7 @@ export default function Segmentation3DViewer({
                     </button>
                     <button
                       onClick={() => setShowBoundingBox(!showBoundingBox)}
-                      className={`flex-1 py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
+                      className={`py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
                         showBoundingBox ? 'bg-cyan-100 text-cyan-800 border-cyan-400' : 'bg-slate-100 text-slate-600 border-slate-200'
                       }`}
                     >
@@ -1261,11 +1579,19 @@ export default function Segmentation3DViewer({
                     </button>
                     <button
                       onClick={() => setShowAxes(!showAxes)}
-                      className={`flex-1 py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
+                      className={`py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
                         showAxes ? 'bg-cyan-100 text-cyan-800 border-cyan-400' : 'bg-slate-100 text-slate-600 border-slate-200'
                       }`}
                     >
                       RAS+ Axes
+                    </button>
+                    <button
+                      onClick={() => setShowCentroidBeacon(!showCentroidBeacon)}
+                      className={`py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
+                        showCentroidBeacon ? 'bg-cyan-100 text-cyan-800 border-cyan-400' : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      Beacon
                     </button>
                   </div>
                 </div>
@@ -1318,6 +1644,20 @@ export default function Segmentation3DViewer({
         >
           {copiedShare ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
           <span>{copiedShare ? 'Copied' : 'Share'}</span>
+        </button>
+
+        {/* Ground Grid Toggle Button */}
+        <button
+          onClick={() => setShowGroundGrid(!showGroundGrid)}
+          className={`px-3 py-1.5 rounded-full backdrop-blur-md border text-xs font-medium flex items-center gap-1.5 shadow-lg transition-colors cursor-pointer ${
+            showGroundGrid
+              ? 'bg-slate-800/90 text-cyan-300 border-cyan-700/60'
+              : 'bg-slate-900/80 hover:bg-slate-900 text-white border-slate-700/80'
+          }`}
+          title="Toggle stereotaxic floor grid"
+        >
+          <Grid className="w-3.5 h-3.5" />
+          <span>Grid</span>
         </button>
 
         {/* Telemetry HUD Toggle Button */}

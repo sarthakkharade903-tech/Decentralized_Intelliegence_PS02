@@ -461,16 +461,22 @@ export function loadAnatomicalBrainModel({
         // Precompute category materials
         const materialCache = {};
         Object.entries(ANATOMICAL_CATEGORIES).forEach(([key, cfg]) => {
+          const isVentricle = key === 'ventricles';
+          const isArtery = key === 'arteries';
+          const isSinus = key === 'veins_sinuses';
+          const isCortex = key === 'cortex';
+
           const mat = new THREE.MeshPhysicalMaterial({
             color: new THREE.Color(cfg.color),
             emissive: new THREE.Color(cfg.emissive),
-            emissiveIntensity: 0.25,
-            roughness: cfg.roughness,
+            emissiveIntensity: isArtery ? 0.4 : isSinus ? 0.35 : 0.25,
+            roughness: isVentricle ? 0.1 : cfg.roughness,
             metalness: cfg.metalness,
             transparent: true,
-            opacity: key === 'cortex' ? cortexOpacity : cfg.opacity,
-            clearcoat: key === 'cortex' ? 0.8 : 0.2,
+            opacity: isCortex ? cortexOpacity : cfg.opacity,
+            clearcoat: isCortex ? 0.6 : isVentricle ? 0.95 : 0.3,
             clearcoatRoughness: 0.2,
+            transmission: isVentricle ? 0.3 : 0.0,
             side: THREE.DoubleSide,
             depthWrite: cfg.depthWrite
           });
