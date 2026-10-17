@@ -48,6 +48,8 @@ export default function DetailedParts3DViewer({
   const [hoveredRegion, setHoveredRegion] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchList, setShowSearchList] = useState(false);
+  const [showInvolvedDrawer, setShowInvolvedDrawer] = useState(false);
+  const [involvedSearch, setInvolvedSearch] = useState('');
 
   // Slicing & Visibility Controls
   const [sliceAxis, setSliceAxis] = useState('x'); // 'x' (Sagittal), 'y' (Axial), 'z' (Coronal)
@@ -619,10 +621,11 @@ export default function DetailedParts3DViewer({
 
   // 6. Update Highlight Color when selectedRegion changes
   useEffect(() => {
-    // Reset all brain parts to neutral
+    // Reset all brain parts to neutral pearlescent alabaster
     brainMeshesRef.current.forEach((mesh) => {
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       mats.forEach((m) => {
+        m.color.set(0xeddce7);
         m.emissive.set(0x000000);
         m.emissiveIntensity = 0;
         m.opacity = brainOpacity;
@@ -631,31 +634,42 @@ export default function DetailedParts3DViewer({
 
     if (!selectedRegion) return;
 
-    // Helper for bilateral regions (e.g. Precentral_gyrus_L and _R)
-    const regionsToHighlight = [selectedRegion];
+    // Highlight target clicked region in striking Electric Purple / Neon Violet
+    const targetNode = regionNodesRef.current.get(selectedRegion);
+    if (targetNode) {
+      targetNode.traverse((child) => {
+        if (child.isMesh && child.material) {
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          mats.forEach((m) => {
+            m.color.set(0x8b5cf6); // Vivid Electric Purple
+            m.emissive.set(0xa855f7); // Neon Violet glow
+            m.emissiveIntensity = 1.3;
+            m.opacity = 1.0;
+          });
+        }
+      });
+    }
+
+    // Highlight contralateral pair (if bilateral) in softer accent lavender
     const match = selectedRegion.match(/^(.+)_([LR])$/);
     if (match) {
       const base = match[1];
       const counterpart = `${base}_${match[2] === 'L' ? 'R' : 'L'}`;
-      if (regionNodesRef.current.has(counterpart)) {
-        regionsToHighlight.push(counterpart);
-      }
-    }
-
-    regionsToHighlight.forEach((reg) => {
-      const node = regionNodesRef.current.get(reg);
-      if (node) {
-        node.traverse((child) => {
+      const pairNode = regionNodesRef.current.get(counterpart);
+      if (pairNode) {
+        pairNode.traverse((child) => {
           if (child.isMesh && child.material) {
             const mats = Array.isArray(child.material) ? child.material : [child.material];
             mats.forEach((m) => {
-              m.emissive.set(0x00ff88); // Bioluminescent emerald
-              m.opacity = 0.92;
+              m.color.set(0xa855f7);
+              m.emissive.set(0xc084fc);
+              m.emissiveIntensity = 0.7;
+              m.opacity = 0.85;
             });
           }
         });
       }
-    });
+    }
   }, [selectedRegion, brainOpacity]);
 
   // 7. Update Tumor Subregions Visibility
@@ -723,6 +737,16 @@ export default function DetailedParts3DViewer({
       .slice(0, 8);
   }, [searchQuery, regionsDb]);
 
+  // Filtered list of tumor-invaded structures for the bottom drawer
+  const filteredInvolved = useMemo(() => {
+    if (!involvedSearch.trim()) return involvedRegions;
+    const q = involvedSearch.toLowerCase();
+    return involvedRegions.filter((item) => {
+      const name = regionsDb[item.id]?.name || item.id;
+      return item.id.toLowerCase().includes(q) || name.toLowerCase().includes(q);
+    });
+  }, [involvedRegions, involvedSearch, regionsDb]);
+
   return (
     <div className="relative w-full h-[620px] rounded-2xl overflow-hidden bg-[#0c040a] border border-[#FCE7F3] shadow-lg select-none">
       {/* ── 3D WEBGL CANVAS CONTAINER ─────────────────────────────────────────── */}
@@ -748,12 +772,12 @@ export default function DetailedParts3DViewer({
         </div>
       )}
 
-      {/* ── TOP FLOATING TOOLBAR: SEARCH & PROXIMITY ────────────────────────── */}
+      {/* ── TOP FLOATING TOOLBAR: SEARCH & AUTO-ROTATE ───────────────────────── */}
       <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
-        {/* Left: Quick Region Search Box */}
+        {/* Left: Quick Region Search Box (Clean Light Medical Style) */}
         <div className="relative pointer-events-auto w-72">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#190914]/85 backdrop-blur-md border border-rose-500/30 text-white shadow-md">
-            <Search className="w-4 h-4 text-rose-400 shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/95 backdrop-blur-md border border-[#FCE7F3] text-slate-800 shadow-md">
+            <Search className="w-4 h-4 text-[#6D263D] shrink-0" />
             <input
               type="text"
               placeholder="Search 188 brain parts..."
@@ -763,12 +787,12 @@ export default function DetailedParts3DViewer({
                 setShowSearchList(true);
               }}
               onFocus={() => setShowSearchList(true)}
-              className="w-full bg-transparent text-xs text-white placeholder-rose-300/50 outline-none"
+              className="w-full bg-transparent text-xs text-slate-800 placeholder-slate-400 outline-none font-medium"
             />
             {searchQuery && (
               <button
                 onClick={() => { setSearchQuery(''); setShowSearchList(false); }}
-                className="text-rose-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -777,7 +801,7 @@ export default function DetailedParts3DViewer({
 
           {/* Autocomplete Dropdown List */}
           {showSearchList && filteredRegions.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1.5 py-1.5 rounded-xl bg-[#190914]/95 backdrop-blur-lg border border-rose-500/30 shadow-2xl z-30 max-h-56 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 mt-1.5 py-1.5 rounded-xl bg-white/95 backdrop-blur-lg border border-[#FCE7F3] shadow-2xl z-30 max-h-56 overflow-y-auto">
               {filteredRegions.map((k) => (
                 <button
                   key={k}
@@ -786,10 +810,10 @@ export default function DetailedParts3DViewer({
                     setSearchQuery(regionsDb[k]?.name || k);
                     setShowSearchList(false);
                   }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-rose-900/40 transition-colors flex items-center justify-between text-rose-100"
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-[#FDF2F5] transition-colors flex items-center justify-between text-slate-800 cursor-pointer"
                 >
-                  <span className="font-medium truncate">{regionsDb[k]?.name || k.replace(/_/g, ' ')}</span>
-                  <span className="text-[10px] font-mono text-rose-400/80 ml-2 shrink-0">
+                  <span className="font-semibold truncate text-[#1E293B]">{regionsDb[k]?.name || k.replace(/_/g, ' ')}</span>
+                  <span className="text-[10px] font-mono text-[#6D263D] ml-2 shrink-0 font-bold">
                     {k.endsWith('_L') ? 'Left' : k.endsWith('_R') ? 'Right' : 'Mid'}
                   </span>
                 </button>
@@ -798,35 +822,22 @@ export default function DetailedParts3DViewer({
           )}
         </div>
 
-        {/* Center / Right: Hover Region Tooltip */}
+        {/* Center: Hover Region Tooltip */}
         {hoveredRegion && !selectedRegion && (
-          <div className="pointer-events-auto px-3 py-1 rounded-full bg-[#190914]/85 backdrop-blur-md border border-cyan-500/40 text-cyan-200 text-xs font-mono shadow-md animate-fade-in flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+          <div className="pointer-events-auto px-3.5 py-1 rounded-full bg-white/95 backdrop-blur-md border border-[#8B5CF6]/50 text-[#6D263D] text-xs font-mono font-bold shadow-md animate-fade-in flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#8B5CF6] animate-pulse" />
             <span>{regionsDb[hoveredRegion]?.name || hoveredRegion.replace(/_/g, ' ')}</span>
           </div>
         )}
 
-        {/* Right: Quick Stats Badge */}
+        {/* Right: Auto-Rotate Toggle */}
         <div className="pointer-events-auto flex items-center gap-2">
-          {involvedRegions.length > 0 && (
-            <button
-              onClick={() => {
-                setSidebarTab('involved');
-                if (!selectedRegion) setSelectedRegion(involvedRegions[0].id);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/80 backdrop-blur-md border border-rose-500/50 text-rose-300 text-xs font-mono shadow-md hover:bg-rose-900/90 transition-all cursor-pointer"
-            >
-              <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
-              <span>{involvedRegions.length} Tumor-Invaded Structures</span>
-            </button>
-          )}
-
           <button
             onClick={() => setLocalAutoRotate(!localAutoRotate)}
-            className={`p-2 rounded-xl border backdrop-blur-md transition-all cursor-pointer ${
+            className={`p-2 rounded-xl border backdrop-blur-md transition-all cursor-pointer shadow-sm ${
               localAutoRotate
-                ? 'bg-rose-900/70 border-rose-400 text-rose-200'
-                : 'bg-[#190914]/85 border-rose-500/30 text-rose-300/80 hover:text-white'
+                ? 'bg-[#6D263D] border-[#6D263D] text-white'
+                : 'bg-white/95 border-[#FCE7F3] text-slate-600 hover:text-[#6D263D]'
             }`}
             title="Toggle Orbit Auto-Rotation"
           >
@@ -835,27 +846,27 @@ export default function DetailedParts3DViewer({
         </div>
       </div>
 
-      {/* ── LEFT OVERLAY: ANATOMICAL INTELLIGENCE DOSSIER ───────────────────── */}
+      {/* ── LEFT OVERLAY: ANATOMICAL INTELLIGENCE DOSSIER (LIGHT NON-AI CLINICAL STYLE) ── */}
       {selectedRegion && selectedInfo && (
-        <div className="absolute top-16 left-4 z-20 w-80 max-h-[500px] overflow-hidden flex flex-col rounded-2xl bg-[#140610]/90 backdrop-blur-md border border-rose-500/30 shadow-2xl text-white animate-in fade-in slide-in-from-left-4 duration-200">
+        <div className="absolute top-16 left-4 z-20 w-84 max-h-[480px] overflow-hidden flex flex-col rounded-2xl bg-white/95 backdrop-blur-md border border-[#FCE7F3] shadow-[0_16px_40px_rgba(109,38,61,0.16)] text-slate-800 animate-in fade-in slide-in-from-left-4 duration-200">
           {/* Dossier Header */}
-          <div className="p-4 border-b border-rose-900/40 flex items-start justify-between bg-gradient-to-r from-rose-950/50 to-transparent">
+          <div className="p-4 border-b border-[#FCE7F3] bg-gradient-to-r from-[#FDF2F5] via-[#FFF5F7] to-white flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase font-semibold">
-                  Selected Structure
+                <span className="w-2 h-2 rounded-full bg-[#8B5CF6] animate-pulse" />
+                <span className="text-[10px] font-mono tracking-wider text-[#6D263D] uppercase font-bold">
+                  Neuroanatomical Structure
                 </span>
               </div>
-              <h4 className="text-base font-bold text-rose-100 mt-1 leading-snug">
+              <h4 className="text-base font-bold text-[#1E293B] mt-0.5 leading-snug">
                 {selectedInfo.name}
               </h4>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-900/50 text-rose-300 border border-rose-800/60">
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-[#FDF2F5] text-[#6D263D] border border-[#FCE7F3] font-semibold">
                   {selectedRegion.endsWith('_L') ? 'Left Hemisphere' : selectedRegion.endsWith('_R') ? 'Right Hemisphere' : 'Bilateral / Core'}
                 </span>
                 {involvedRegions.some((r) => r.id === selectedRegion) && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40 font-semibold flex items-center gap-1">
+                  <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                     Invaded Margin
                   </span>
@@ -865,39 +876,40 @@ export default function DetailedParts3DViewer({
 
             <button
               onClick={() => setSelectedRegion(null)}
-              className="p-1 rounded-lg text-rose-400 hover:text-white hover:bg-rose-900/40 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-[#FDF2F5] transition-colors cursor-pointer"
+              title="Close Dossier"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* Dossier Body */}
-          <div className="p-4 space-y-3 overflow-y-auto text-xs text-rose-200/90 leading-relaxed font-sans">
+          <div className="p-4 space-y-3.5 overflow-y-auto text-xs text-slate-700 leading-relaxed font-sans">
             <div>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-rose-400/80 block mb-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#6E5D65] font-bold block mb-1">
                 Neuroanatomical Role & Function:
               </span>
-              <p className="bg-rose-950/30 p-2.5 rounded-xl border border-rose-900/30 text-rose-100/90 leading-normal">
+              <div className="bg-[#FDFBF9] border border-[#F1E5E9] p-3 rounded-xl text-slate-700 text-xs leading-relaxed shadow-2xs">
                 {selectedInfo.desc || 'Detailed functional documentation available in reference links.'}
-              </p>
+              </div>
             </div>
 
             {selectedInfo.refs && selectedInfo.refs.length > 0 && (
               <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-rose-400/80 block mb-1">
-                  Literature & References:
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#6E5D65] font-bold block mb-1">
+                  Clinical References & Atlas:
                 </span>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {selectedInfo.refs.map((url, i) => (
                     <a
                       key={i}
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-between p-2 rounded-lg bg-rose-950/20 hover:bg-rose-900/40 border border-rose-900/20 text-cyan-300 hover:text-cyan-200 transition-all font-mono text-[11px]"
+                      className="flex items-center justify-between p-2 rounded-xl bg-white hover:bg-[#FDF2F5] border border-[#FCE7F3] text-[#6D263D] hover:text-[#581D30] font-mono text-[11px] font-medium transition-all shadow-2xs"
                     >
-                      <span className="truncate max-w-[200px]">{url.replace(/^https?:\/\//, '')}</span>
-                      <ExternalLink className="w-3 h-3 shrink-0 ml-1.5 text-cyan-400" />
+                      <span className="truncate max-w-[210px]">{url.replace(/^https?:\/\//, '')}</span>
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0 ml-1.5 text-[#6D263D]" />
                     </a>
                   ))}
                 </div>
@@ -917,7 +929,7 @@ export default function DetailedParts3DViewer({
           </div>
           <button
             onClick={() => setSliceEnabled(!sliceEnabled)}
-            className={`px-2 py-0.5 rounded-md text-[10px] font-mono transition-all ${
+            className={`px-2 py-0.5 rounded-md text-[10px] font-mono transition-all cursor-pointer ${
               sliceEnabled ? 'bg-cyan-500 text-black font-bold' : 'bg-rose-950 text-rose-400 border border-rose-800'
             }`}
           >
@@ -940,7 +952,7 @@ export default function DetailedParts3DViewer({
                   setSliceAxis(axis.id);
                   if (!sliceEnabled) setSliceEnabled(true);
                 }}
-                className={`py-1 rounded-lg text-xs font-mono font-medium transition-all ${
+                className={`py-1 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer ${
                   sliceAxis === axis.id && sliceEnabled
                     ? 'bg-cyan-500 text-black font-bold shadow-xs'
                     : 'bg-rose-950/60 text-rose-300 hover:text-white border border-rose-900/40'
@@ -992,31 +1004,113 @@ export default function DetailedParts3DViewer({
         </div>
       </div>
 
-      {/* ── BOTTOM HUD BANNER: BRAIN PARTS GUIDE & LEGEND ────────────────────── */}
+      {/* ── FLOATING DRAWER: INVADED STRUCTURES LIST (OPENS WHEN BOTTOM BUTTON CLICKED) ── */}
+      {showInvolvedDrawer && involvedRegions.length > 0 && (
+        <div className="absolute bottom-20 left-4 z-30 w-92 max-h-72 overflow-hidden flex flex-col rounded-2xl bg-white/98 backdrop-blur-md border-2 border-rose-300 shadow-[0_16px_40px_rgba(244,63,94,0.22)] text-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="p-3 border-b border-rose-100 bg-rose-50/70 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+              <span className="text-xs font-bold text-rose-950 font-mono">
+                Tumor Contact & Invaded Structures ({involvedRegions.length})
+              </span>
+            </div>
+            <button
+              onClick={() => setShowInvolvedDrawer(false)}
+              className="p-1 rounded-md text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Search filter for invaded list */}
+          <div className="p-2 border-b border-slate-100 bg-slate-50/60">
+            <input
+              type="text"
+              placeholder="Filter invaded structures..."
+              value={involvedSearch}
+              onChange={(e) => setInvolvedSearch(e.target.value)}
+              className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg outline-none placeholder-slate-400 text-slate-800 focus:border-rose-400 font-medium"
+            />
+          </div>
+
+          {/* Scrollable List */}
+          <div className="p-2 space-y-1 overflow-y-auto max-h-52">
+            {filteredInvolved.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setSelectedRegion(item.id);
+                  setShowInvolvedDrawer(false);
+                }}
+                className={`w-full text-left p-2 rounded-lg text-xs transition-all flex items-center justify-between cursor-pointer ${
+                  selectedRegion === item.id
+                    ? 'bg-[#8B5CF6]/15 border border-[#8B5CF6]/50 text-[#6D263D] font-bold'
+                    : 'hover:bg-rose-50/70 border border-transparent text-slate-700'
+                }`}
+              >
+                <div className="truncate mr-2">
+                  <div className="font-semibold text-slate-800">{regionsDb[item.id]?.name || item.id.replace(/_/g, ' ')}</div>
+                  <div className="text-[10px] font-mono text-slate-400">
+                    {item.id.endsWith('_L') ? 'Left Hemisphere' : item.id.endsWith('_R') ? 'Right Hemisphere' : 'Bilateral'}
+                  </div>
+                </div>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full shrink-0 font-bold ${
+                  item.severity === 'high'
+                    ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                    : 'bg-amber-100 text-amber-800 border border-amber-200'
+                }`}>
+                  {item.severity === 'high' ? 'Core' : 'Edema'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── BOTTOM HUD BANNER: INVADED ALERT (DOWN SIZE, LITTLE BIG, LIGHT RED FLICKING) & LEGEND ── */}
       <div className="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
-        {/* Subregion Legend */}
-        <div className="pointer-events-auto flex items-center gap-3 px-3 py-1.5 rounded-xl bg-[#140610]/85 backdrop-blur-md border border-rose-500/30 text-xs font-mono shadow-md">
-          <div className="flex items-center gap-1.5 text-rose-300">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-            <span>ET: Enhancing Tumor</span>
+        {/* Left: Invaded Structures Alert Button (Down Side, Little Big, Light Red Flicking Colour) */}
+        {involvedRegions.length > 0 && (
+          <button
+            onClick={() => setShowInvolvedDrawer(!showInvolvedDrawer)}
+            className="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-rose-50/98 hover:bg-rose-100/98 backdrop-blur-md border-2 border-rose-400 text-rose-950 shadow-[0_0_26px_rgba(244,63,94,0.4)] transition-all cursor-pointer animate-pulse hover:animate-none hover:shadow-[0_0_32px_rgba(244,63,94,0.55)]"
+          >
+            <span className="relative flex h-3.5 w-3.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-80" />
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-600" />
+            </span>
+            <span className="text-xs font-mono font-bold tracking-tight text-rose-950">
+              {involvedRegions.length} Tumor-Invaded Structures
+            </span>
+            <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-rose-200 text-rose-950 font-bold border border-rose-300">
+              {showInvolvedDrawer ? 'Hide ▲' : 'View List ▼'}
+            </span>
+          </button>
+        )}
+
+        {/* Center / Right: Subregion Legend */}
+        <div className="pointer-events-auto flex items-center gap-3 px-3.5 py-2 rounded-2xl bg-white/95 backdrop-blur-md border border-[#FCE7F3] text-xs font-mono shadow-md text-slate-800">
+          <div className="flex items-center gap-1.5 text-rose-600 font-semibold">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#E11D48]" />
+            <span>ET (4)</span>
           </div>
-          <div className="flex items-center gap-1.5 text-cyan-300">
-            <span className="w-2.5 h-2.5 rounded-full bg-sky-500" />
-            <span>NETC: Core</span>
+          <div className="flex items-center gap-1.5 text-sky-600 font-semibold">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#0284C7]" />
+            <span>NETC (1)</span>
           </div>
-          <div className="flex items-center gap-1.5 text-amber-300">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-            <span>ED: Edema</span>
+          <div className="flex items-center gap-1.5 text-amber-600 font-semibold">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
+            <span>ED (2)</span>
           </div>
-          <div className="flex items-center gap-1.5 text-emerald-300 pl-2 border-l border-rose-900/40">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-            <span>Highlighted Part</span>
+          <div className="flex items-center gap-1.5 text-[#8B5CF6] font-bold pl-2.5 border-l border-slate-200">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#8B5CF6] animate-pulse" />
+            <span>Selected Gyrus</span>
           </div>
         </div>
 
-        {/* Tip Badge */}
-        <div className="pointer-events-auto text-[11px] font-mono text-rose-300/80 bg-[#140610]/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-rose-500/20 shadow-md">
-          💡 Click any brain gyrus to isolate & view clinical role
+        {/* Right: Tip Badge */}
+        <div className="pointer-events-auto text-[11px] font-mono text-slate-600 bg-white/90 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-[#FCE7F3] shadow-md font-medium">
+          💡 Click any brain part to isolate & view clinical dossier
         </div>
       </div>
     </div>
