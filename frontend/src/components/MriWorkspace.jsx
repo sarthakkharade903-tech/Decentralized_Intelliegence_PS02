@@ -11,7 +11,7 @@ import {
   AlertTriangle,
   RotateCcw
 } from 'lucide-react';
-import { validateNiftiFile, predictSegmentation } from '../services/api';
+import { validateNiftiFile, predictSegmentation, API_BASE_URL } from '../services/api';
 import thumbT1 from '../assets/atlas/thumb_t1.png';
 import thumbT1Gd from '../assets/atlas/thumb_t1gd.png';
 import thumbT2 from '../assets/atlas/thumb_t2.png';
@@ -171,7 +171,7 @@ export default function MriWorkspace({ workspaceRef, onInferenceSuccess }) {
       }
       setAnalysisStatus('error');
       setAnalysisError(
-        err.message || 'Unable to connect to FastAPI backend at http://localhost:8000.'
+        err.message || `Unable to connect to FastAPI backend at ${API_BASE_URL || 'http://localhost:8000'}.`
       );
     }
   };
@@ -442,7 +442,7 @@ export default function MriWorkspace({ workspaceRef, onInferenceSuccess }) {
                   {analysisError}
                 </p>
                 <p className="text-[10px] text-rose-300/70 mt-1 font-mono">
-                  Target: POST http://localhost:8000/api/v1/segment/predict
+                  Target: POST {API_BASE_URL || 'http://localhost:8000'}/api/v1/segment/predict
                 </p>
               </div>
             </div>

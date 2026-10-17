@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Niivue, SLICE_TYPE } from '@niivue/niivue';
 import { Loader2, AlertCircle, Maximize2, Crosshair } from 'lucide-react';
+import { API_BASE_URL } from '../services/api';
 
 export default function NiiVueViewer({
   uploadedFiles = null,
@@ -80,12 +81,13 @@ export default function NiiVueViewer({
     let scanUrl = null;
     let isBlob = false;
     let scanName = null;
+    const backendBase = API_BASE_URL || 'http://localhost:8000';
     if (uploadedFiles && uploadedFiles[activeModality] instanceof File) {
       scanUrl = URL.createObjectURL(uploadedFiles[activeModality]);
       isBlob = true;
       scanName = uploadedFiles[activeModality].name;
     } else {
-      scanUrl = `http://localhost:8000/api/v1/artifacts/sample_${activeModality}.nii.gz`;
+      scanUrl = `${backendBase}/api/v1/artifacts/sample_${activeModality}.nii.gz`;
       scanName = `sample_${activeModality}.nii.gz`;
     }
 
@@ -93,11 +95,11 @@ export default function NiiVueViewer({
     let targetMaskUrl = null;
     let maskName = 'segmentation.nii.gz';
     if (maskUrl) {
-      targetMaskUrl = maskUrl.startsWith('http') ? maskUrl : `http://localhost:8000${maskUrl}`;
+      targetMaskUrl = maskUrl.startsWith('http') ? maskUrl : `${backendBase}${maskUrl}`;
       const urlParts = maskUrl.split('/');
       maskName = urlParts[urlParts.length - 1] || 'segmentation.nii.gz';
     } else {
-      targetMaskUrl = 'http://localhost:8000/api/v1/artifacts/sample_seg.nii.gz';
+      targetMaskUrl = `${backendBase}/api/v1/artifacts/sample_seg.nii.gz`;
       maskName = 'sample_seg.nii.gz';
     }
 

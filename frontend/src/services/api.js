@@ -7,11 +7,12 @@
  * Health Endpoint: GET /api/v1/health
  */
 
-// Configurable API base URL: defaults to empty string in production (relative reverse proxy) or local backend in development
-export const API_BASE_URL =
+const rawBaseUrl =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL !== undefined)
     ? import.meta.env.VITE_API_BASE_URL
     : ((typeof import.meta !== 'undefined' && import.meta.env?.DEV) ? 'http://localhost:8000' : 'http://localhost:8000');
+
+export const API_BASE_URL = (rawBaseUrl || '').trim().replace(/\/+$/, '');
 
 export const MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GiB challenge guardrail
 
@@ -103,7 +104,10 @@ export async function checkBackendHealth(signal) {
   const url = `${API_BASE_URL}/api/v1/health`;
   const response = await fetch(url, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: {
+      Accept: 'application/json',
+      'ngrok-skip-browser-warning': 'true',
+    },
     signal
   });
 
@@ -200,6 +204,7 @@ export async function predictSegmentation({
     const endpoint = `${API_BASE_URL}/api/v1/segment/predict`;
 
     xhr.open('POST', endpoint, true);
+    xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
     xhr.timeout = 300000; // 5-minute timeout for large sliding window 3D inference
 
     if (signal) {
@@ -300,7 +305,10 @@ export async function predictSegmentation({
  */
 export async function downloadArtifact(url, filename = 'segmentation_result.nii.gz') {
   const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
-  const response = await fetch(fullUrl, { method: 'GET' });
+  const response = await fetch(fullUrl, {
+    method: 'GET',
+    headers: { 'ngrok-skip-browser-warning': 'true' },
+  });
 
   if (!response.ok) {
     throw new Error(`Failed to download artifact: HTTP ${response.status} (${response.statusText})`);
@@ -340,14 +348,23 @@ export async function downloadClinicalReportPdf(patientCase = null, filename = '
     if (patientCase) {
       response = await fetch(targetUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
         body: JSON.stringify(patientCase),
       });
     } else {
-      response = await fetch(targetUrl, { method: 'GET' });
+      response = await fetch(targetUrl, {
+        method: 'GET',
+        headers: { 'ngrok-skip-browser-warning': 'true' },
+      });
     }
   } catch {
-    response = await fetch('/api/v1/report/pdf', { method: 'GET' });
+    response = await fetch('/api/v1/report/pdf', {
+      method: 'GET',
+      headers: { 'ngrok-skip-browser-warning': 'true' },
+    });
   }
 
   if (!response.ok) {

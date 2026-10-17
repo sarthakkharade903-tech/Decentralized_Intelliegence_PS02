@@ -12,6 +12,7 @@ import {
   X,
   Eye,
 } from 'lucide-react';
+import { API_BASE_URL } from '../services/api';
 
 export default function DetailedParts3DViewer({
   meshUrl,
@@ -113,9 +114,10 @@ export default function DetailedParts3DViewer({
     setLoading(true);
     setLoadingStep('Fetching Patient Segmentation Mesh...');
 
+    const backendBase = API_BASE_URL || 'http://localhost:8000';
     const targetUrl = meshUrl
-      ? (meshUrl.startsWith('http') ? meshUrl : `http://localhost:8000${meshUrl}`)
-      : 'http://localhost:8000/api/v1/artifacts/sample_mesh.json';
+      ? (meshUrl.startsWith('http') ? meshUrl : `${backendBase}${meshUrl}`)
+      : `${backendBase}/api/v1/artifacts/sample_mesh.json`;
 
     const tryFetchLocalFallback = () => {
       fetch('/data/sample_mesh.json')
@@ -130,12 +132,12 @@ export default function DetailedParts3DViewer({
         })
         .catch((fallbackErr) => {
           if (isCancelled) return;
-          setError(fallbackErr.message || 'Unable to load 3D mesh. Please verify backend server on port 8000.');
+          setError(fallbackErr.message || 'Unable to load 3D mesh. Please verify backend server connection.');
           setLoading(false);
         });
     };
 
-    fetch(targetUrl)
+    fetch(targetUrl, { headers: { 'ngrok-skip-browser-warning': 'true' } })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -148,7 +150,7 @@ export default function DetailedParts3DViewer({
       .catch(() => {
         if (isCancelled) return;
         // Fallback to backend sample_mesh.json
-        fetch('http://localhost:8000/api/v1/artifacts/sample_mesh.json')
+        fetch(`${backendBase}/api/v1/artifacts/sample_mesh.json`, { headers: { 'ngrok-skip-browser-warning': 'true' } })
           .then((r) => {
             if (!r.ok) throw new Error(`Backend sample mesh HTTP ${r.status}`);
             return r.json();

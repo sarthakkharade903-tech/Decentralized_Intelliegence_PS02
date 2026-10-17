@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { Loader2, AlertCircle, RotateCw, Activity, Layers, Eye } from 'lucide-react';
+import { API_BASE_URL } from '../services/api';
 
 export default function RealTumor3DViewer({
   meshUrl,
@@ -40,9 +41,10 @@ export default function RealTumor3DViewer({
     setLoadingStep('Fetching 3D Segmentation Mesh...');
     setError(null);
 
+    const backendBase = API_BASE_URL || 'http://localhost:8000';
     const targetUrl = meshUrl
-      ? (meshUrl.startsWith('http') ? meshUrl : `http://localhost:8000${meshUrl}`)
-      : 'http://localhost:8000/api/v1/artifacts/sample_mesh.json';
+      ? (meshUrl.startsWith('http') ? meshUrl : `${backendBase}${meshUrl}`)
+      : `${backendBase}/api/v1/artifacts/sample_mesh.json`;
 
     const tryFetchLocalFallback = () => {
       fetch('/data/sample_mesh.json')
@@ -58,12 +60,12 @@ export default function RealTumor3DViewer({
         })
         .catch((fallbackErr) => {
           if (isCancelled) return;
-          setError(fallbackErr.message || 'Unable to load 3D mesh. Please verify backend server on port 8000.');
+          setError(fallbackErr.message || 'Unable to load 3D mesh. Please verify backend server connection.');
           setLoading(false);
         });
     };
 
-    fetch(targetUrl)
+    fetch(targetUrl, { headers: { 'ngrok-skip-browser-warning': 'true' } })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -76,7 +78,7 @@ export default function RealTumor3DViewer({
       })
       .catch(() => {
         if (isCancelled) return;
-        fetch('http://localhost:8000/api/v1/artifacts/sample_mesh.json')
+        fetch(`${backendBase}/api/v1/artifacts/sample_mesh.json`, { headers: { 'ngrok-skip-browser-warning': 'true' } })
           .then((r) => {
             if (!r.ok) throw new Error(`Backend sample mesh HTTP ${r.status}`);
             return r.json();
