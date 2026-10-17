@@ -478,7 +478,7 @@ export function loadAnatomicalBrainModel({
             clearcoatRoughness: 0.2,
             transmission: isVentricle ? 0.3 : 0.0,
             side: THREE.DoubleSide,
-            depthWrite: cfg.depthWrite
+            depthWrite: isCortex ? (cortexOpacity >= 0.99) : cfg.depthWrite
           });
           materialCache[key] = mat;
         });
@@ -549,7 +549,8 @@ export function loadAnatomicalBrainModel({
           originalCenter: center,
           materialCache,
           categoryMeshes,
-          box
+          cerebrumBox,
+          box: cerebrumBox
         };
 
         if (onLoaded) {

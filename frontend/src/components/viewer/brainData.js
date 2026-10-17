@@ -3125,6 +3125,17 @@ export const BRAIN_CATEGORIES = {
 
 export const BRAIN_PRESETS = [
   {
+    "id": "tumor",
+    "label": "Tumor & Anatomy",
+    "color": "#EF4444",
+    "on": [
+      "cortex",
+      "cerebellum",
+      "brainstem"
+    ],
+    "cortex": 0.45
+  },
+  {
     "id": "whole",
     "label": "Whole brain",
     "color": "#E7DEC9",

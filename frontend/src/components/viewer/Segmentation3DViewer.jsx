@@ -103,8 +103,8 @@ export default function Segmentation3DViewer({
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [hemisphere, setHemisphere] = useState('both'); // 'left' | 'both' | 'right'
-  const [activePreset, setActivePreset] = useState('whole'); // preset id
-  const [cortexOpacity, setCortexOpacity] = useState(1.0);
+  const [activePreset, setActivePreset] = useState('tumor'); // 'tumor' | 'whole' | ...
+  const [cortexOpacity, setCortexOpacity] = useState(0.45);
   const [isLayersExpanded, setIsLayersExpanded] = useState(false);
   const [selectedStructure, setSelectedStructure] = useState(null);
   const [isolatedId, setIsolatedId] = useState(null);
@@ -282,11 +282,13 @@ export default function Segmentation3DViewer({
     // 5. Hierarchy Groups
     const tumorGroup = new THREE.Group();
     tumorGroup.name = 'PatientTumorGroup';
+    tumorGroup.renderOrder = 10;
     scene.add(tumorGroup);
     meshesRef.current.tumorGroup = tumorGroup;
 
     const brainGroup = new THREE.Group();
     brainGroup.name = 'AnatomicalBrainGroup';
+    brainGroup.renderOrder = 1;
     scene.add(brainGroup);
     meshesRef.current.brainGroup = brainGroup;
 
@@ -311,7 +313,7 @@ export default function Segmentation3DViewer({
 
     // Stereotaxic Coordinate Floor Grid (Polar rings with coordinate scale ticks)
     const floorGrid = new THREE.PolarGridHelper(130, 8, 4, 64, 0x1e293b, 0x0f172a);
-    floorGrid.position.set(0, 0, -82);
+    floorGrid.position.set(0, 0, -108);
     floorGrid.rotation.x = Math.PI / 2;
     floorGrid.visible = showGroundGrid;
     scene.add(floorGrid);
@@ -321,7 +323,7 @@ export default function Segmentation3DViewer({
     const loaderHandle = loadAnatomicalBrainModel({
       modelUrl: '/models/brain.glb',
       decoderPath: '/draco/gltf/',
-      cortexOpacity: 1.0,
+      cortexOpacity: 0.45,
       onLoaded: (brainMaster) => {
         if (!brainGroup) return;
         brainGroup.add(brainMaster);
@@ -519,7 +521,7 @@ export default function Segmentation3DViewer({
         if (child.isMesh && child.userData?.anatomicalCategory === 'cortex' && child.material) {
           child.material.opacity = cortexOpacity;
           child.material.transparent = cortexOpacity < 0.99;
-          child.material.depthWrite = cortexOpacity > 0.5;
+          child.material.depthWrite = cortexOpacity >= 0.99;
           child.material.needsUpdate = true;
         }
       });
@@ -568,6 +570,7 @@ export default function Segmentation3DViewer({
   const buildPreviewLesion = useCallback((tumorGroup, targetCentroid = [28.4, 18.2, 14.6]) => {
     const preview = new THREE.Group();
     preview.name = 'ReferencePreviewLesion';
+    preview.renderOrder = 10;
     preview.position.set(targetCentroid[0], targetCentroid[1], targetCentroid[2]);
 
     const dims = telemetry.dimensionsMm || [44.0, 36.0, 32.0];
@@ -591,6 +594,7 @@ export default function Segmentation3DViewer({
       depthWrite: false
     });
     const edMesh = new THREE.Mesh(edGeo, edMat);
+    edMesh.renderOrder = 9;
     edMesh.visible = showED;
     edMesh.userData = {
       tumorLabel: 'Peritumoral Edema (ED)',
@@ -616,6 +620,7 @@ export default function Segmentation3DViewer({
       wireframe: isWireframe
     });
     const etMesh = new THREE.Mesh(etGeo, etMat);
+    etMesh.renderOrder = 11;
     etMesh.visible = showET;
     etMesh.userData = {
       tumorLabel: 'Enhancing Active Tumor (ET)',
@@ -640,6 +645,7 @@ export default function Segmentation3DViewer({
       wireframe: isWireframe
     });
     const netcMesh = new THREE.Mesh(netcGeo, netcMat);
+    netcMesh.renderOrder = 10;
     netcMesh.visible = showNETC;
     netcMesh.userData = {
       tumorLabel: 'Necrotic Core (NETC)',
@@ -659,6 +665,7 @@ export default function Segmentation3DViewer({
     });
     const beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
     beaconMesh.name = 'TumorCentroidBeacon';
+    beaconMesh.renderOrder = 12;
     beaconMesh.userData = {
       tumorLabel: 'Tumor Centroid (Stereotaxic RAS+)',
       tumorRegion: 'Centroid',
@@ -672,10 +679,12 @@ export default function Segmentation3DViewer({
     const boxEdges = new THREE.EdgesGeometry(boxGeo);
     const boxMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.35 });
     const boxHelper = new THREE.LineSegments(boxEdges, boxMat);
+    boxHelper.renderOrder = 13;
     boxHelper.visible = showBoundingBox;
     preview.add(boxHelper);
 
     const axesHelper = new THREE.AxesHelper(Math.max(...dims, 30) * 0.7);
+    axesHelper.renderOrder = 13;
     axesHelper.visible = showAxes;
     preview.add(axesHelper);
 
@@ -781,6 +790,7 @@ export default function Segmentation3DViewer({
             wireframe: isWireframe
           });
           netcMesh = new THREE.Mesh(netcGeo, netcMat);
+          netcMesh.renderOrder = 10;
           netcMesh.visible = showNETC;
           netcMesh.userData = {
             tumorLabel: 'Necrotic Core (NETC)',
@@ -817,6 +827,7 @@ export default function Segmentation3DViewer({
             depthWrite: false
           });
           edMesh = new THREE.Mesh(edGeo, edMat);
+          edMesh.renderOrder = 9;
           edMesh.visible = showED;
           edMesh.userData = {
             tumorLabel: 'Peritumoral Edema (ED)',
@@ -854,6 +865,7 @@ export default function Segmentation3DViewer({
             wireframe: isWireframe
           });
           etMesh = new THREE.Mesh(etGeo, etMat);
+          etMesh.renderOrder = 11;
           etMesh.visible = showET;
           etMesh.userData = {
             tumorLabel: 'Enhancing Active Tumor (ET)',
@@ -875,6 +887,7 @@ export default function Segmentation3DViewer({
       });
       const beaconMesh = new THREE.Mesh(beaconGeo, beaconMat);
       beaconMesh.name = 'TumorCentroidBeacon';
+      beaconMesh.renderOrder = 12;
       beaconMesh.userData = {
         tumorLabel: 'Tumor Centroid (Stereotaxic RAS+)',
         tumorRegion: 'Centroid',
@@ -897,10 +910,12 @@ export default function Segmentation3DViewer({
       const boxMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.35 });
       const boxHelper = new THREE.LineSegments(boxEdges, boxMat);
       boxHelper.position.copy(box.getCenter(new THREE.Vector3()));
+      boxHelper.renderOrder = 13;
       boxHelper.visible = showBoundingBox;
       tumorGroup.add(boxHelper);
 
       const axesHelper = new THREE.AxesHelper(Math.max(size.x, size.y, size.z, 20) * 0.7);
+      axesHelper.renderOrder = 13;
       axesHelper.visible = showAxes;
       tumorGroup.add(axesHelper);
 
@@ -1072,6 +1087,8 @@ export default function Segmentation3DViewer({
       smoothFlyTo([25, -95, -35], [0, 0, -20]);
     } else if (presetId === 'vent') {
       smoothFlyTo([110, 60, 45], [0, 0, 5]);
+    } else if (presetId === 'tumor') {
+      smoothFlyTo([125, 80, 110], [15, 10, 5]);
     } else if (presetId === 'whole') {
       smoothFlyTo([130, 85, 140], [0, 0, 0]);
     } else {
@@ -1087,7 +1104,7 @@ export default function Segmentation3DViewer({
     setIsolatedId(null);
     setSelectedStructure(null);
     setSlicerMode('none');
-    applyPreset('whole');
+    applyPreset('tumor');
   };
 
   // --------------------------------------------------------------------------
