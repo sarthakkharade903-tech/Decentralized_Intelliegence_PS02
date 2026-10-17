@@ -117,6 +117,24 @@ export default function DetailedParts3DViewer({
       ? (meshUrl.startsWith('http') ? meshUrl : `http://localhost:8000${meshUrl}`)
       : 'http://localhost:8000/api/v1/artifacts/sample_mesh.json';
 
+    const tryFetchLocalFallback = () => {
+      fetch('/data/sample_mesh.json')
+        .then((r) => {
+          if (!r.ok) throw new Error(`Local fallback HTTP ${r.status}`);
+          return r.json();
+        })
+        .then((localData) => {
+          if (isCancelled) return;
+          setMeshInfo(localData);
+          if (onMetadataLoaded && localData.metadata) onMetadataLoaded(localData.metadata);
+        })
+        .catch((fallbackErr) => {
+          if (isCancelled) return;
+          setError(fallbackErr.message || 'Unable to load 3D mesh. Please verify backend server on port 8000.');
+          setLoading(false);
+        });
+    };
+
     fetch(targetUrl)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -129,18 +147,20 @@ export default function DetailedParts3DViewer({
       })
       .catch(() => {
         if (isCancelled) return;
-        // Fallback to sample_mesh.json
+        // Fallback to backend sample_mesh.json
         fetch('http://localhost:8000/api/v1/artifacts/sample_mesh.json')
-          .then((r) => r.json())
+          .then((r) => {
+            if (!r.ok) throw new Error(`Backend sample mesh HTTP ${r.status}`);
+            return r.json();
+          })
           .then((sampleData) => {
             if (isCancelled) return;
             setMeshInfo(sampleData);
             if (onMetadataLoaded && sampleData.metadata) onMetadataLoaded(sampleData.metadata);
           })
-          .catch((fallbackErr) => {
+          .catch(() => {
             if (isCancelled) return;
-            setError(fallbackErr.message || 'Unable to load 3D mesh.');
-            setLoading(false);
+            tryFetchLocalFallback();
           });
       });
 
