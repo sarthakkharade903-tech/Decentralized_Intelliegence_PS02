@@ -12,6 +12,8 @@ import {
   runBenchmarkCase,
   aggregateBenchmark,
   exportBenchmarkJSON,
+  validateCaseEligibility,
+  runBenchmarkSuite,
 } from '../src/lib/benchmark.js';
 
 describe('Trust Layer: Input Integrity & Pre-Flight Checks', () => {
@@ -302,5 +304,104 @@ describe('Benchmark: Infrastructure, Aggregation, & Export', () => {
     assert.equal(parsed.tool, 'NeuroVault');
     assert.ok(parsed.exported_at);
     assert.ok(parsed.scientific_note.includes('research prototype'));
+  });
+
+  test('validateCaseEligibility accepts eligible cases and rejects incomplete/training cases', () => {
+    // Valid case
+    const valid = {
+      caseId: 'CASE_001',
+      modalities: { t1: true, t1gd: true, t2: true, flair: true },
+      expertSeg: true,
+      trainingExposure: 'held_out',
+    };
+    assert.equal(validateCaseEligibility(valid).eligible, true);
+
+    // Missing sequence (flair missing)
+    const missingMod = {
+      caseId: 'CASE_002',
+      modalities: { t1: true, t1gd: true, t2: true },
+      expertSeg: true,
+    };
+    const resMod = validateCaseEligibility(missingMod);
+    assert.equal(resMod.eligible, false);
+    assert.match(resMod.reason, /missing FLAIR/i);
+
+    // Missing expert mask
+    const missingExpert = {
+      caseId: 'CASE_003',
+      modalities: { t1: true, t1gd: true, t2: true, flair: true },
+    };
+    const resExp = validateCaseEligibility(missingExpert);
+    assert.equal(resExp.eligible, false);
+    assert.match(resExp.reason, /expert reference segmentation missing/i);
+
+    // Training exposure (data leakage prevention)
+    const trainingCase = {
+      caseId: 'CASE_TRAIN',
+      modalities: { t1: true, t1gd: true, t2: true, flair: true },
+      expertSeg: true,
+      trainingExposure: 'training',
+    };
+    const resTrain = validateCaseEligibility(trainingCase);
+    assert.equal(resTrain.eligible, false);
+    assert.match(resTrain.reason, /data leakage/i);
+  });
+
+  test('runBenchmarkCase rejects spatially misaligned volumes when predGeo and refGeo differ', async () => {
+    const pred = new Uint8Array([4, 4, 0, 0]);
+    const ref  = new Uint8Array([4, 4, 0, 0]);
+    const dims = [4, 1, 1];
+
+    const predGeo = { dims: [4, 1, 1], pixDims: [1, 1, 1], affine: identityAffine };
+    const mismatchGeo = { dims: [4, 1, 2], pixDims: [1, 1, 1], affine: identityAffine };
+
+    const res = await runBenchmarkCase(pred, ref, dims, identityAffine, 'MISALIGNED_CASE', {
+      isSynthetic: true,
+      predGeo,
+      refGeo: mismatchGeo,
+    });
+
+    assert.equal(res.caseId, 'MISALIGNED_CASE');
+    assert.equal(res.metrics, null);
+    assert.ok(res.error);
+    assert.match(res.error, /incompatible spatial dimensions/i);
+  });
+
+  test('runBenchmarkSuite executes manifest, tracks exclusions, and marks blocked status when model is untrained and real cases < 10', async () => {
+    const manifest = [
+      {
+        caseId: 'CASE_VALID_SYNTH',
+        isSynthetic: true,
+        modalities: { t1: true, t1gd: true, t2: true, flair: true },
+        expertSeg: true,
+      },
+      {
+        caseId: 'CASE_INELIGIBLE_LEAKAGE',
+        modalities: { t1: true, t1gd: true, t2: true, flair: true },
+        expertSeg: true,
+        trainingExposure: 'training',
+      },
+    ];
+
+    const evaluateCaseFn = async (c) => ({
+      predVolume: new Uint8Array([4, 4, 0, 0]),
+      refVolume: new Uint8Array([4, 4, 0, 0]),
+      dims: [4, 1, 1],
+      affine: identityAffine,
+      predGeo: { dims: [4, 1, 1], pixDims: [1, 1, 1] },
+      refGeo: { dims: [4, 1, 1], pixDims: [1, 1, 1] },
+    });
+
+    const suiteResult = await runBenchmarkSuite(manifest, {
+      modelReadiness: 'UNTRAINED_WEIGHTS_MISSING',
+      evaluateCaseFn,
+    });
+
+    assert.equal(suiteResult.totalManifestCases, 2);
+    assert.equal(suiteResult.eligibleCaseCount, 1);
+    assert.equal(suiteResult.excludedCaseCount, 1);
+    assert.equal(suiteResult.exclusions[0].caseId, 'CASE_INELIGIBLE_LEAKAGE');
+    assert.match(suiteResult.exclusions[0].reason, /data leakage/i);
+    assert.equal(suiteResult.benchmarkStatus, 'FRAMEWORK_READY_BUT_MODEL_AND_DATA_BLOCKED');
   });
 });

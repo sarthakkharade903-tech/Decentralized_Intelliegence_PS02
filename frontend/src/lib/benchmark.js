@@ -20,6 +20,7 @@ import {
   computeRegionMask,
   BRATS_REGIONS,
 } from './metrics.js';
+import { validateOverlayGeometry } from '../components/viewer/GeometryValidator.js';
 
 // ---------------------------------------------------------------------------
 // 1. Per-Case Benchmark Runner
@@ -56,6 +57,14 @@ export async function runBenchmarkCase(predVolume, refVolume, dims, affine, case
     if (!predVolume || !refVolume) throw new Error('predVolume and refVolume are required');
     if (predVolume.length !== refVolume.length) {
       throw new Error(`Size mismatch: pred=${predVolume.length}, ref=${refVolume.length}`);
+    }
+
+    // Geometry validation if metadata provided
+    if (opts.predGeo && opts.refGeo) {
+      const geoCheck = validateOverlayGeometry(opts.predGeo, opts.refGeo);
+      if (!geoCheck.valid && !geoCheck.compatible) {
+        throw new Error(geoCheck.error || geoCheck.reason || 'Spatial geometry mismatch');
+      }
     }
 
     // Volumetrics
@@ -241,7 +250,181 @@ function computeStatSummary(values) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. JSON Export
+// 3. Evaluation Manifest & Eligibility Validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates a candidate evaluation case from an evaluation manifest against eligibility invariants.
+ *
+ * Rules:
+ * - Must declare a non-empty caseId string.
+ * - Must specify all 4 required MRI modalities (T1, T1-Gd/T1ce, T2, FLAIR).
+ * - Must specify an expert reference mask (expertSeg).
+ * - Must not have known training exposure (prevents test data leakage).
+ *
+ * @param {Object} caseEntry
+ * @returns {{ eligible: boolean, reason?: string }}
+ */
+export function validateCaseEligibility(caseEntry) {
+  if (!caseEntry || typeof caseEntry !== 'object') {
+    return { eligible: false, reason: 'Malformed case entry: must be an object' };
+  }
+  if (!caseEntry.caseId || typeof caseEntry.caseId !== 'string' || !caseEntry.caseId.trim()) {
+    return { eligible: false, reason: 'Missing unique case identifier (caseId)' };
+  }
+
+  const modalities = caseEntry.modalities || caseEntry.files || caseEntry;
+  const hasT1 = Boolean(modalities.t1);
+  const hasT1ce = Boolean(modalities.t1gd || modalities.t1ce);
+  const hasT2 = Boolean(modalities.t2);
+  const hasFlair = Boolean(modalities.flair);
+
+  const missingMods = [];
+  if (!hasT1) missingMods.push('T1');
+  if (!hasT1ce) missingMods.push('T1-Gd/T1ce');
+  if (!hasT2) missingMods.push('T2');
+  if (!hasFlair) missingMods.push('FLAIR');
+
+  if (missingMods.length > 0) {
+    return {
+      eligible: false,
+      reason: `Incomplete sequence set: missing ${missingMods.join(', ')}`,
+    };
+  }
+
+  const hasExpert = Boolean(caseEntry.expertSeg || modalities.expertSeg);
+  if (!hasExpert) {
+    return {
+      eligible: false,
+      reason: 'Expert reference segmentation missing or not provided',
+    };
+  }
+
+  // Prevent data leakage: case must not have been seen in model training
+  if (caseEntry.trainingExposure === 'training') {
+    return {
+      eligible: false,
+      reason: 'Data leakage: case was present in model training set',
+    };
+  }
+
+  return { eligible: true };
+}
+
+// ---------------------------------------------------------------------------
+// 4. Manifest-Driven Benchmark Suite Runner
+// ---------------------------------------------------------------------------
+
+/**
+ * Runs a reproducible evaluation suite from a declared evaluation manifest.
+ *
+ * Enforces:
+ * - Eligibility filtering (missing sequences, data leakage, missing expert).
+ * - Explicit model readiness verification.
+ * - Spatial geometry compatibility before comparison.
+ * - Tracking per-case exclusions and failures.
+ * - Aggregating statistics strictly on valid, evaluated cases.
+ *
+ * @param {Array<Object>|{ cases: Array<Object> }} manifest
+ * @param {Object} [runnerOptions]
+ * @param {'VERIFIED_TRAINED_MODEL'|'UNVERIFIED'|'UNTRAINED_WEIGHTS_MISSING'|'CHECKPOINT_LOAD_FAILURE'} [runnerOptions.modelReadiness]
+ * @param {Function} [runnerOptions.evaluateCaseFn]
+ * @returns {Promise<BenchmarkSuiteResult>}
+ *
+ * @typedef {{
+ *   benchmarkStatus: string,
+ *   modelReadiness: string,
+ *   totalManifestCases: number,
+ *   eligibleCaseCount: number,
+ *   evaluatedCaseCount: number,
+ *   excludedCaseCount: number,
+ *   exclusions: Array<{ caseId: string, reason: string }>,
+ *   summary: BenchmarkSummary,
+ *   cases: BenchmarkCase[]
+ * }} BenchmarkSuiteResult
+ */
+export async function runBenchmarkSuite(manifest, runnerOptions = {}) {
+  const casesList = Array.isArray(manifest) ? manifest : (manifest?.cases || []);
+  const modelReadiness = runnerOptions.modelReadiness || 'UNTRAINED_WEIGHTS_MISSING';
+  const evaluateCaseFn = runnerOptions.evaluateCaseFn || null;
+
+  const evaluatedCases = [];
+  const exclusions = [];
+
+  for (const caseEntry of casesList) {
+    const eligibility = validateCaseEligibility(caseEntry);
+    if (!eligibility.eligible) {
+      exclusions.push({
+        caseId: caseEntry.caseId || 'UNKNOWN',
+        reason: eligibility.reason,
+      });
+      continue;
+    }
+
+    if (typeof evaluateCaseFn === 'function') {
+      try {
+        const caseData = await evaluateCaseFn(caseEntry);
+        const benchmarkResult = await runBenchmarkCase(
+          caseData.predVolume,
+          caseData.refVolume,
+          caseData.dims,
+          caseData.affine,
+          caseEntry.caseId,
+          {
+            isSynthetic: Boolean(caseEntry.isSynthetic),
+            predGeo: caseData.predGeo,
+            refGeo: caseData.refGeo,
+          }
+        );
+
+        if (benchmarkResult.error) {
+          exclusions.push({
+            caseId: caseEntry.caseId,
+            reason: `Execution failure: ${benchmarkResult.error}`,
+          });
+        }
+        evaluatedCases.push(benchmarkResult);
+      } catch (err) {
+        exclusions.push({
+          caseId: caseEntry.caseId,
+          reason: `Evaluation error: ${err.message || String(err)}`,
+        });
+      }
+    } else {
+      exclusions.push({
+        caseId: caseEntry.caseId,
+        reason: 'No evaluation provider configured (manifest inspection only)',
+      });
+    }
+  }
+
+  const summary = aggregateBenchmark(evaluatedCases);
+
+  // Determine scientific status based on model readiness and eligible real cases
+  let benchmarkStatus = 'VERIFIED_COMPLETE';
+  if (modelReadiness !== 'VERIFIED_TRAINED_MODEL' && summary.realCaseCount < 10) {
+    benchmarkStatus = 'FRAMEWORK_READY_BUT_MODEL_AND_DATA_BLOCKED';
+  } else if (modelReadiness !== 'VERIFIED_TRAINED_MODEL') {
+    benchmarkStatus = 'BLOCKED_BY_MODEL_VALIDATION';
+  } else if (summary.realCaseCount < 10) {
+    benchmarkStatus = 'FRAMEWORK_READY_BUT_DATA_BLOCKED';
+  }
+
+  return {
+    benchmarkStatus,
+    modelReadiness,
+    totalManifestCases: casesList.length,
+    eligibleCaseCount: casesList.length - exclusions.length,
+    evaluatedCaseCount: evaluatedCases.length,
+    excludedCaseCount: exclusions.length,
+    exclusions,
+    summary,
+    cases: evaluatedCases,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 5. JSON Export
 // ---------------------------------------------------------------------------
 
 /**
@@ -257,11 +440,14 @@ export function exportBenchmarkJSON(results) {
       schema_version: '1.0',
       tool: 'NeuroVault',
       protocol: 'BraTS 2021 Multi-Parametric MRI Segmentation',
+      benchmark_status: results?.benchmarkStatus || (results?.summary?.isPreliminary ? 'PRELIMINARY' : 'COMPLETE'),
+      model_readiness: results?.modelReadiness || 'UNTRAINED_WEIGHTS_MISSING',
       exported_at: new Date().toISOString(),
       scientific_note:
         'All metrics are computed on candidate AI segmentations. ' +
         'This is a research prototype — not a certified diagnostic device. ' +
-        'Synthetic fixtures are labeled isSynthetic=true and must not be cited as clinical results.',
+        'Synthetic fixtures are labeled isSynthetic=true and must not be cited as clinical results. ' +
+        'Publishable benchmarks require ≥10 held-out patient cases with verified trained model checkpoints.',
       ...results,
     },
     null,
