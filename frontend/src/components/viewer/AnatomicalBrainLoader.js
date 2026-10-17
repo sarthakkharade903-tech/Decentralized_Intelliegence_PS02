@@ -10,47 +10,83 @@ export const ANATOMICAL_CATEGORIES = {
   cortex: {
     id: 'cortex',
     label: 'Cerebral Cortex',
-    color: 0x94a3b8, // Slate translucent cortical envelope
-    emissive: 0x1e293b,
-    opacity: 0.18,
-    roughness: 0.35,
-    metalness: 0.1,
+    color: 0xE7DEC9, // Cream/bone cortical surface
+    emissive: 0x222222,
+    opacity: 1.0,
+    roughness: 0.75,
+    metalness: 0.05,
     transparent: true,
-    depthWrite: false,
+    depthWrite: true,
     renderOrder: 1
+  },
+  cerebellum: {
+    id: 'cerebellum',
+    label: 'Cerebellar Hemispheres',
+    color: 0xF0894E, // Warm apricot/coral
+    emissive: 0x332010,
+    opacity: 1.0,
+    roughness: 0.75,
+    metalness: 0.05,
+    transparent: true,
+    depthWrite: true,
+    renderOrder: 1
+  },
+  brainstem: {
+    id: 'brainstem',
+    label: 'Brainstem (Midbrain, Pons, Medulla)',
+    color: 0xE8B24A, // Warm golden stone
+    emissive: 0x332810,
+    opacity: 1.0,
+    roughness: 0.7,
+    metalness: 0.05,
+    transparent: true,
+    depthWrite: true,
+    renderOrder: 2
   },
   deep_grey: {
     id: 'deep_grey',
-    label: 'Deep Grey Nuclei & Diencephalon',
-    color: 0xf59e0b, // Amber / warm gold
-    emissive: 0x78350f,
-    opacity: 0.85,
-    roughness: 0.3,
-    metalness: 0.2,
+    label: 'Deep Grey / Basal Ganglia',
+    color: 0xB57BE0, // Purple / violet
+    emissive: 0x4a1d6e,
+    opacity: 0.95,
+    roughness: 0.35,
+    metalness: 0.1,
+    transparent: true,
+    depthWrite: true,
+    renderOrder: 3
+  },
+  diencephalon: {
+    id: 'diencephalon',
+    label: 'Diencephalon (Thalamus, Hypothalamus)',
+    color: 0x7E8CF2, // Periwinkle / indigo
+    emissive: 0x27348b,
+    opacity: 0.95,
+    roughness: 0.35,
+    metalness: 0.1,
     transparent: true,
     depthWrite: true,
     renderOrder: 3
   },
   white_matter: {
     id: 'white_matter',
-    label: 'Corpus Callosum & White Matter',
-    color: 0x06b6d4, // Cyan
-    emissive: 0x0e7490,
-    opacity: 0.75,
-    roughness: 0.25,
-    metalness: 0.1,
+    label: 'White Matter & Commissures',
+    color: 0xD7DDE8, // Silver / grey-white
+    emissive: 0x2a3140,
+    opacity: 0.9,
+    roughness: 0.4,
+    metalness: 0.05,
     transparent: true,
     depthWrite: true,
     renderOrder: 2
   },
   tracts: {
     id: 'tracts',
-    label: 'Neural Tractography (CST, Arcuate, OR)',
-    color: 0x14b8a6, // Teal / electric cyan
-    emissive: 0x0f766e,
-    opacity: 0.85,
-    roughness: 0.2,
-    metalness: 0.3,
+    label: 'White-Matter Tracts (Pathways)',
+    color: 0x5FB6C9, // Teal / turquoise
+    emissive: 0x114e5a,
+    opacity: 0.9,
+    roughness: 0.3,
+    metalness: 0.1,
     transparent: true,
     depthWrite: true,
     renderOrder: 3
@@ -58,58 +94,34 @@ export const ANATOMICAL_CATEGORIES = {
   ventricles: {
     id: 'ventricles',
     label: 'Ventricular System (CSF)',
-    color: 0x38bdf8, // Sapphire blue / translucent fluid
-    emissive: 0x0369a1,
-    opacity: 0.6,
-    roughness: 0.1,
-    metalness: 0.4,
-    transparent: true,
-    depthWrite: true,
-    renderOrder: 2
-  },
-  cerebellum: {
-    id: 'cerebellum',
-    label: 'Cerebellar Hemispheres',
-    color: 0x64748b, // Cool slate
-    emissive: 0x1e293b,
-    opacity: 0.4,
-    roughness: 0.4,
-    metalness: 0.1,
-    transparent: true,
-    depthWrite: false,
-    renderOrder: 1
-  },
-  brainstem: {
-    id: 'brainstem',
-    label: 'Brainstem (Midbrain, Pons, Medulla)',
-    color: 0x78716c, // Warm stone
-    emissive: 0x292524,
-    opacity: 0.75,
-    roughness: 0.35,
-    metalness: 0.1,
+    color: 0x3FC8D6, // Bright cyan / sapphire
+    emissive: 0x09525c,
+    opacity: 0.85,
+    roughness: 0.15,
+    metalness: 0.3,
     transparent: true,
     depthWrite: true,
     renderOrder: 2
   },
   arteries: {
     id: 'arteries',
-    label: 'Arterial Vasculature (Circle of Willis)',
-    color: 0xef4444, // Crimson / red
-    emissive: 0xb91c1c,
-    opacity: 0.9,
-    roughness: 0.2,
-    metalness: 0.3,
+    label: 'Arteries (Circle of Willis)',
+    color: 0xF05068, // Red / rose
+    emissive: 0x6e1220,
+    opacity: 0.95,
+    roughness: 0.3,
+    metalness: 0.2,
     transparent: true,
     depthWrite: true,
     renderOrder: 4
   },
   veins_sinuses: {
     id: 'veins_sinuses',
-    label: 'Venous Sinuses & Deep Veins',
-    color: 0x3b82f6, // Royal blue
-    emissive: 0x1d4ed8,
-    opacity: 0.85,
-    roughness: 0.2,
+    label: 'Dural Venous Sinuses & Veins',
+    color: 0x5078E8, // Cobalt blue
+    emissive: 0x12276e,
+    opacity: 0.9,
+    roughness: 0.3,
     metalness: 0.2,
     transparent: true,
     depthWrite: true,
@@ -117,15 +129,27 @@ export const ANATOMICAL_CATEGORIES = {
   },
   cranial_nerves: {
     id: 'cranial_nerves',
-    label: 'Cranial Nerves (CN I - XII)',
-    color: 0xfacc15, // Golden yellow
-    emissive: 0x854d0e,
+    label: 'Cranial Nerves (I–XII)',
+    color: 0xD9D24A, // Golden yellow
+    emissive: 0x575312,
     opacity: 0.95,
-    roughness: 0.25,
+    roughness: 0.3,
     metalness: 0.1,
     transparent: true,
     depthWrite: true,
     renderOrder: 4
+  },
+  meninges_dura: {
+    id: 'meninges_dura',
+    label: 'Meninges & Dura (Falx, Tentorium)',
+    color: 0xCC63CC, // Magenta
+    emissive: 0x471647,
+    opacity: 0.35,
+    roughness: 0.45,
+    metalness: 0.05,
+    transparent: true,
+    depthWrite: false,
+    renderOrder: 1
   }
 };
 
@@ -456,6 +480,7 @@ export function loadAnatomicalBrainModel({
         const categoryMeshes = {
           cortex: [],
           deep_grey: [],
+          diencephalon: [],
           white_matter: [],
           tracts: [],
           ventricles: [],
@@ -463,7 +488,8 @@ export function loadAnatomicalBrainModel({
           brainstem: [],
           arteries: [],
           veins_sinuses: [],
-          cranial_nerves: []
+          cranial_nerves: [],
+          meninges_dura: []
         };
 
         // Traverse all meshes and organize them
