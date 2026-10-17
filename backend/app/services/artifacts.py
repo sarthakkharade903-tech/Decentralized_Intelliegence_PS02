@@ -56,7 +56,10 @@ def generate_tumor_surface_mesh(
     Returns:
         Structured dictionary containing mesh vertices, faces, and normals scaled for Three.js.
     """
-    from skimage.measure import marching_cubes
+    try:
+        from skimage.measure import marching_cubes
+    except ImportError:
+        marching_cubes = None
     import scipy.ndimage as ndi
 
     spacing = list(voxel_spacing) if voxel_spacing else [1.0, 1.0, 1.0]
@@ -102,8 +105,9 @@ def generate_tumor_surface_mesh(
     center_offset = vol_center * np.array(spacing, dtype=np.float32)
 
     # Adapt step size to mask dimensions
-    min_dim = min(shape)
-    effective_step = max(1, min(step_size, min_dim // 3 if min_dim > 6 else 1))
+    # If marching_cubes is not installed, return structured metadata gracefully
+    if marching_cubes is None:
+        return mesh_payload
 
     # 1. Extract BraTS Tumor Sub-regions
     region_specs = [
