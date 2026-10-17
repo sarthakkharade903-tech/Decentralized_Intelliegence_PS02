@@ -14,4 +14,5 @@ export default defineConfig({
   optimizeDeps: {
     include: ['three'],
   },
+  envPrefix: ['VITE_', 'PUBLIC_', 'NEUROSCOPE_'],
 })

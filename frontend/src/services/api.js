@@ -7,10 +7,17 @@
  * Health Endpoint: GET /api/v1/health
  */
 
-const rawBaseUrl =
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL !== undefined)
-    ? import.meta.env.VITE_API_BASE_URL
-    : ((typeof import.meta !== 'undefined' && import.meta.env?.DEV) ? 'http://localhost:8000' : 'http://localhost:8000');
+const envUrl =
+  (typeof import.meta !== 'undefined' && (
+    import.meta.env?.PUBLIC_API_BASE_URL ||
+    import.meta.env?.NEUROSCOPE_API_URL ||
+    import.meta.env?.PUBLIC_BACKEND_URL ||
+    import.meta.env?.VITE_API_BASE_URL
+  ));
+
+const rawBaseUrl = envUrl
+  ? envUrl
+  : ((typeof import.meta !== 'undefined' && import.meta.env?.DEV) ? 'http://localhost:8000' : 'http://localhost:8000');
 
 export const API_BASE_URL = (rawBaseUrl || '').trim().replace(/\/+$/, '');
 

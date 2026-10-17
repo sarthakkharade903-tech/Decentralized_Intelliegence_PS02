@@ -85,6 +85,8 @@ weights/
 *.safetensors
 *.engine
 *.tflite
+ngrok.exe
+ngrok.zip
 
 # Output Predictions & Generated Reports
 outputs/
