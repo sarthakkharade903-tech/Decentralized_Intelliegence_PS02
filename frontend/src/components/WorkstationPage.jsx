@@ -15,8 +15,10 @@ import {
   Copy,
   Download,
   RotateCw,
+  BrainCircuit,
 } from 'lucide-react';
 import RealTumor3DViewer from './RealTumor3DViewer';
+import DetailedParts3DViewer from './DetailedParts3DViewer';
 import NiiVueViewer from './NiiVueViewer';
 
 export default function WorkstationPage({
@@ -269,6 +271,7 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
             {[
               { id: 'mpr', label: '2D Multi-Planar', icon: Layers },
               { id: '3d', label: '3D Tumor Model', icon: Box },
+              { id: 'detail-parts', label: '3D Tumor Detail Parts', icon: BrainCircuit },
               { id: 'volumetrics', label: 'Clinical Volumetrics', icon: BarChart3 },
               { id: 'report', label: 'Diagnostic Report', icon: FileText },
             ].map((tab) => {
@@ -601,6 +604,101 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
                   cameraPreset={cameraPreset}
                 />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* TAB 2.5: 3D Tumor Detail Parts Viewport                           */}
+        {/* ------------------------------------------------------------------ */}
+        {activeTab === 'detail-parts' && (
+          <div className="space-y-6">
+            <div className="p-6 rounded-2xl bg-white border border-[#FCE7F3] shadow-[0_4px_24px_rgba(109,38,61,0.05)] space-y-4">
+              {/* Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#FCE7F3] pb-4">
+                {/* Projections */}
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#FDF2F5] border border-[#FCE7F3] text-xs font-mono">
+                  {[
+                    { id: 'iso', label: 'Isometric' },
+                    { id: 'axial', label: 'Axial' },
+                    { id: 'coronal', label: 'Coronal' },
+                    { id: 'sagittal', label: 'Sagittal' },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setCameraPreset(p.id)}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        cameraPreset === p.id
+                          ? 'bg-[#6D263D] text-white font-semibold shadow-xs'
+                          : 'text-[#6E5D65] hover:text-[#30252A]'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Subregion Visibility Toggles */}
+                <div className="flex items-center gap-3 text-xs font-mono">
+                  <button
+                    onClick={() => setShowED(!showED)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border transition-all cursor-pointer ${
+                      showED
+                        ? 'bg-[#FEF3C7] text-[#92400E] border-[#FDE68A] font-medium'
+                        : 'bg-white text-slate-400 border-slate-200'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span>Edema (ED)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowNETC(!showNETC)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border transition-all cursor-pointer ${
+                      showNETC
+                        ? 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD] font-medium'
+                        : 'bg-white text-slate-400 border-slate-200'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-cyan-500" />
+                    <span>Core (NETC)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowET(!showET)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border transition-all cursor-pointer ${
+                      showET
+                        ? 'bg-[#FFE4E6] text-[#BE123C] border-[#FECDD3] font-medium'
+                        : 'bg-white text-slate-400 border-slate-200'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    <span>Enhancing (ET)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIs3DAutoRotating(!is3DAutoRotating)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border transition-all cursor-pointer ${
+                      is3DAutoRotating
+                        ? 'bg-[#FDF2F5] text-[#6D263D] border-[#FCE7F3] font-medium'
+                        : 'bg-white text-slate-400 border-slate-200'
+                    }`}
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                    <span>{is3DAutoRotating ? 'Rotating' : 'Paused'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 188-Region Detailed Anatomical Neuro-Parts WebGL Viewer */}
+              <DetailedParts3DViewer
+                meshUrl={patientCase.artifacts?.mesh_url || '/api/v1/artifacts/sample_mesh.json'}
+                showNETC={showNETC}
+                showED={showED}
+                showET={showET}
+                isAutoRotating={is3DAutoRotating}
+                cameraPreset={cameraPreset}
+              />
             </div>
           </div>
         )}

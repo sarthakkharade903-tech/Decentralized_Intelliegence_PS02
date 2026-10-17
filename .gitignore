@@ -60,6 +60,7 @@ dist-ssr/
 # Medical Data & Large Scans (STRICT ZERO-LEAKAGE)
 # Never commit patient or research MRI data to GitHub
 data/
+!frontend/public/data/
 datasets/
 raw_data/
 uploads/
