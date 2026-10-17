@@ -195,9 +195,10 @@ export default function Segmentation3DViewer({
   // Clean up tumor meshes and preview geometries
   // --------------------------------------------------------------------------
   const cleanupTumorMeshes = useCallback(() => {
-    const { tumorGroup, netc, ed, et, boxHelper, axesHelper, previewGroup } = meshesRef.current;
+    const { tumorGroup, netc, ed, et, boxHelper, axesHelper, centroidBeacon, previewGroup } = meshesRef.current;
     if (tumorGroup) {
-      [netc, ed, et, boxHelper, axesHelper, previewGroup].forEach((mesh) => {
+      tumorGroup.position.set(0, 0, 0);
+      [netc, ed, et, boxHelper, axesHelper, centroidBeacon, previewGroup].forEach((mesh) => {
         if (!mesh) return;
         tumorGroup.remove(mesh);
         if (mesh.geometry) mesh.geometry.dispose();
@@ -215,10 +216,10 @@ export default function Segmentation3DViewer({
     meshesRef.current.et = null;
     meshesRef.current.boxHelper = null;
     meshesRef.current.axesHelper = null;
+    meshesRef.current.centroidBeacon = null;
     meshesRef.current.previewGroup = null;
   }, []);
 
-  // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
   // Camera Smooth Cinematic Fly-To Helper
   // --------------------------------------------------------------------------
@@ -752,6 +753,7 @@ export default function Segmentation3DViewer({
       }
 
       const centroid = computeTumorCentroid({ volume, dims, affine });
+      tumorGroup.position.set(centroid[0], centroid[1], centroid[2]);
 
       // NETC (Label 1)
       let netcMesh = null;

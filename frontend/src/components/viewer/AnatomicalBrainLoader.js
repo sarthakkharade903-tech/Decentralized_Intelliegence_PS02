@@ -523,15 +523,25 @@ export function loadAnatomicalBrainModel({
           }
         });
 
-        // Compute cerebrum bounding center in millimeter space
-        // In model coordinates cerebrum center is ~ [0, 1.62, -0.012]
-        // In RAS+ transformed mm coordinates: X=0, Y=-12, Z=1620
-        const box = new THREE.Box3().setFromObject(rootScene);
+        // Compute true cerebrum bounding center directly from cerebral cortex meshes
+        // (Prevents descending spinal nerves and lower spinal cord from skewing the vertical center)
+        rootScene.updateMatrixWorld(true);
+
+        const cerebrumBox = new THREE.Box3();
+        if (categoryMeshes.cortex && categoryMeshes.cortex.length > 0) {
+          categoryMeshes.cortex.forEach((mesh) => {
+            cerebrumBox.expandByObject(mesh);
+          });
+        } else {
+          cerebrumBox.setFromObject(rootScene);
+        }
+
         const center = new THREE.Vector3();
-        box.getCenter(center);
+        cerebrumBox.getCenter(center);
 
         // Center the brain so its cerebrum center sits at (0, 0, 0)
         rootScene.position.set(-center.x, -center.y, -center.z);
+        rootScene.updateMatrixWorld(true);
         brainMaster.add(rootScene);
 
         // Save reference to cerebrum center
