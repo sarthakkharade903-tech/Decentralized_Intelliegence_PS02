@@ -77,6 +77,37 @@ export function validateNiftiFile(file) {
 }
 
 /**
+ * Suggests a sequence modality based on filename conventions.
+ * Never silently assumes correctness if ambiguous.
+ *
+ * @param {string} filename
+ * @returns {{ slotId: string|null, confidence: 'high'|'ambiguous'|'none', reason?: string }}
+ */
+export function suggestSequenceFromFilename(filename) {
+  if (!filename) return { slotId: null, confidence: 'none' };
+  const lower = filename.toLowerCase();
+
+  // Explicit Post-contrast / Gadolinium
+  if (lower.includes('t1ce') || lower.includes('t1gd') || lower.includes('t1_ce') || lower.includes('t1-ce') || lower.includes('t1_gd') || lower.includes('t1-gd')) {
+    return { slotId: 't1gd', confidence: 'high', reason: 'Detected contrast keyword (t1ce/t1gd)' };
+  }
+  // FLAIR
+  if (lower.includes('flair')) {
+    return { slotId: 'flair', confidence: 'high', reason: 'Detected FLAIR keyword' };
+  }
+  // T2 (ensure not t1 or t1ce)
+  if (lower.includes('t2') && !lower.includes('t1')) {
+    return { slotId: 't2', confidence: 'high', reason: 'Detected T2 keyword' };
+  }
+  // T1 Native (ensure not t1ce or t1gd)
+  if (lower.includes('t1') && !lower.includes('ce') && !lower.includes('gd')) {
+    return { slotId: 't1', confidence: 'high', reason: 'Detected T1 keyword' };
+  }
+
+  return { slotId: null, confidence: 'ambiguous', reason: 'Filename does not unambiguously indicate an MRI modality' };
+}
+
+/**
  * Checks backend health and GPU readiness.
  *
  * @param {AbortSignal} [signal]
@@ -95,6 +126,103 @@ export async function checkBackendHealth(signal) {
   }
 
   return response.json();
+}
+
+/**
+ * Authoritative backend validation for 4 co-registered NIfTI scans without running AI inference.
+ *
+ * @param {Object} params
+ * @param {File} params.t1
+ * @param {File} params.t1gd
+ * @param {File} params.t2
+ * @param {File} params.flair
+ * @param {string} [params.patientId]
+ * @param {AbortSignal} [params.signal]
+ * @returns {Promise<Object>}
+ */
+export async function validateMriDataset({
+  t1,
+  t1gd,
+  t2,
+  flair,
+  patientId = 'ANONYMOUS',
+  signal = null
+}) {
+  const sequenceEntries = [
+    { key: 't1', name: 'T1 Native', file: t1 },
+    { key: 't1gd', name: 'T1ce / T1Gd', file: t1gd },
+    { key: 't2', name: 'T2-Weighted', file: t2 },
+    { key: 'flair', name: 'FLAIR', file: flair }
+  ];
+
+  for (const seq of sequenceEntries) {
+    if (!seq.file) {
+      throw new ApiError('MISSING_SEQUENCE', `Missing required sequence: ${seq.name}.`, { missing: seq.key });
+    }
+    const val = validateNiftiFile(seq.file);
+    if (!val.valid) {
+      throw new ApiError('INVALID_FILE', `${seq.name}: ${val.error}`, { sequence: seq.key });
+    }
+  }
+
+  for (let i = 0; i < sequenceEntries.length; i++) {
+    for (let j = i + 1; j < sequenceEntries.length; j++) {
+      if (
+        sequenceEntries[i].file.name === sequenceEntries[j].file.name &&
+        sequenceEntries[i].file.size === sequenceEntries[j].file.size
+      ) {
+        throw new ApiError(
+          'DUPLICATE_SEQUENCE_ASSIGNMENT',
+          `Duplicate file detected: "${sequenceEntries[i].file.name}" is assigned to both ${sequenceEntries[i].name} and ${sequenceEntries[j].name}. Each slot requires a distinct MRI modality.`
+        );
+      }
+    }
+  }
+
+  const formData = new FormData();
+  formData.append('t1', t1, t1.name || 't1.nii.gz');
+  formData.append('t1gd', t1gd, t1gd.name || 't1gd.nii.gz');
+  formData.append('t2', t2, t2.name || 't2.nii.gz');
+  formData.append('flair', flair, flair.name || 'flair.nii.gz');
+  formData.append('patient_id', patientId);
+
+  const endpoint = `${API_BASE_URL}/api/v1/segment/validate`;
+
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      body: formData,
+      signal
+    });
+  } catch (netErr) {
+    if (netErr.name === 'AbortError') throw netErr;
+    throw new ApiError(
+      'BACKEND_UNAVAILABLE',
+      `Unable to connect to backend at "${API_BASE_URL || window.location.origin}". Ensure the FastAPI server is running on port 8000.`
+    );
+  }
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    // Non-JSON response
+  }
+
+  if (response.ok && data) {
+    return data;
+  }
+
+  const errorCode = data?.error || `HTTP_${response.status}`;
+  let message = data?.message || 'Dataset validation failed.';
+  if (response.status === 413) {
+    message = 'File exceeds the 1 GiB size limit.';
+  } else if (!data?.message && typeof data?.detail === 'string') {
+    message = data.detail;
+  }
+
+  throw new ApiError(errorCode, message, data?.detail || {});
 }
 
 /**

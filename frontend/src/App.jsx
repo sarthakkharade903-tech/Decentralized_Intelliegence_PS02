@@ -9,6 +9,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('landing'); // 'landing' | 'workstation'
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [predictionData, setPredictionData] = useState(null);
+  const [uploadedFiles, setUploadedFiles] = useState(null);
   const workspaceRef = useRef(null);
 
   // Close modal on Escape key press
@@ -33,8 +34,11 @@ export default function App() {
     }
   };
 
-  const handleInferenceSuccess = (result) => {
+  const handleInferenceSuccess = (result, files = null) => {
     setPredictionData(result);
+    if (files) {
+      setUploadedFiles(files);
+    }
     setIsUploadOpen(false);
     setCurrentPage('workstation');
   };
@@ -83,6 +87,7 @@ export default function App() {
             onBackToHome={() => setCurrentPage('landing')}
             onOpenUpload={() => setIsUploadOpen(true)}
             predictionData={predictionData}
+            uploadedFiles={uploadedFiles}
           />
         </main>
       )}

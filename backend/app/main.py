@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from backend.app.exceptions import NeuroScopeException
+from backend.app.exceptions import ModelNotReadyException, NeuroScopeException
 from backend.app.services.artifacts import (
     DEFAULT_ARTIFACTS_DIR,
     RESEARCH_DISCLAIMER,
@@ -29,6 +29,7 @@ from backend.app.services.artifacts import (
 from backend.app.services.inference import (
     DEFAULT_WEIGHTS_PATH,
     InferenceResult,
+    get_model_readiness,
     run_segmentation_inference,
 )
 from backend.app.services.validator import validate_mpmri_sequences
@@ -39,6 +40,16 @@ async def lifespan(app: FastAPI):
     """Application lifespan context for resource verification."""
     # Ensure artifacts directory exists
     DEFAULT_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    # Warm up and verify trained model weights in memory on startup
+    try:
+        readiness = get_model_readiness()
+        if readiness["model_ready"]:
+            sha = readiness.get("checkpoint_sha256") or ""
+            print(f"NeuroScope-3D: Verified model ready in memory (SHA256: {sha[:16]}...)")
+        else:
+            print(f"NeuroScope-3D WARNING: Model not ready: {readiness.get('error') or 'Weights missing'}")
+    except Exception as e:
+        print(f"NeuroScope-3D WARNING: Startup model verification failed: {e}")
     yield
 
 
@@ -136,18 +147,49 @@ async def handle_generic_exception(request: Request, exc: Exception) -> JSONResp
 @app.get("/api/v1/health", tags=["Health"])
 async def health_check() -> Dict[str, Any]:
     """Health check endpoint reporting API readiness and inference environment."""
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    weights_path = Path(os.getenv("NEUROSCOPE_WEIGHTS_PATH", str(DEFAULT_WEIGHTS_PATH)))
-    weights_available = weights_path.exists()
+    readiness = get_model_readiness()
 
     return {
-        "status": "healthy",
+        "status": "healthy" if readiness["model_ready"] else "degraded",
         "service": "NeuroScope-3D API",
         "version": "1.0.0",
-        "hardware_device": device,
-        "model_weights_present": weights_available,
+        "hardware_device": readiness["hardware_device"],
+        "model_ready": readiness["model_ready"],
+        "model_weights_present": readiness["weights_present"],
+        "weights_present": readiness["weights_present"],
+        "checkpoint_path": readiness["checkpoint_path"],
+        "checkpoint_sha256": readiness["checkpoint_sha256"],
         "disclaimer": RESEARCH_DISCLAIMER,
     }
+
+
+# ─── Dataset Validation Endpoint ──────────────────────────────────────────────
+
+@app.post("/api/v1/segment/validate", tags=["Validation"])
+@app.post("/api/v1/validate", tags=["Validation"])
+async def validate_mri_dataset(
+    t1: UploadFile = File(..., description="T1 Native MRI scan (.nii or .nii.gz)"),
+    t1gd: UploadFile = File(..., description="T1-Gd Contrast MRI scan (.nii or .nii.gz)"),
+    t2: UploadFile = File(..., description="T2-Weighted MRI scan (.nii or .nii.gz)"),
+    flair: UploadFile = File(..., description="FLAIR MRI scan (.nii or .nii.gz)"),
+    patient_id: str = Form("ANONYMOUS", description="Optional patient or case identifier"),
+) -> Dict[str, Any]:
+    """Authoritative NIfTI dataset validation endpoint.
+
+    Validates that:
+    - Exactly 4 supported NIfTI sequences (.nii or .nii.gz) are provided
+    - File sizes are within the 1 GiB limit
+    - Scans are strictly 3D spatial volumes (2D/4D rejected)
+    - Voxel values are finite (no NaN or Inf)
+    - Volumes are non-constant and non-zero
+    - Affine matrices are non-singular, finite, and co-registered within tolerances
+    """
+    raw_uploads = {"t1": t1, "t1gd": t1gd, "t2": t2, "flair": flair}
+    validation_result = await run_in_threadpool(validate_mpmri_sequences, raw_uploads)
+    res_dict = validation_result.to_dict()
+    res_dict["patient_id"] = patient_id
+    res_dict["disclaimer"] = RESEARCH_DISCLAIMER
+    return res_dict
 
 
 # ─── Inference Prediction Endpoint ────────────────────────────────────────────
@@ -173,16 +215,26 @@ async def predict_segmentation(
     # UploadFiles are read synchronously within validate_mpmri_sequences
     validation_result = validate_mpmri_sequences(raw_uploads)
 
-    # 2. Model Weights Resolution
-    configured_weights = os.getenv("NEUROSCOPE_WEIGHTS_PATH")
-    weights_path = Path(configured_weights) if configured_weights else DEFAULT_WEIGHTS_PATH
-    actual_weights = weights_path if weights_path.exists() else None
+    # 2. Strict Model Readiness Check (Fail-Closed)
+    readiness = get_model_readiness()
+    if not readiness["model_ready"]:
+        raise ModelNotReadyException(
+            message=(
+                "Inference model weights are unavailable or failed verification. "
+                "Prediction cannot proceed without verified trained weights."
+            ),
+            detail={
+                "checkpoint_path": readiness["checkpoint_path"],
+                "reason": readiness.get("error") or "Weights file missing or unverified",
+            },
+        )
 
     # 3. Sliding Window 3D Inference Execution (Offloaded to worker thread)
     inference_result: InferenceResult = await run_in_threadpool(
         run_segmentation_inference,
         sequences=validation_result.sequences,
-        weights_path=actual_weights,
+        weights_path=Path(readiness["checkpoint_path"]),
+        allow_untrained=False,
     )
 
     # 4. Generate and Export Artifacts (.nii.gz mask + .json report)

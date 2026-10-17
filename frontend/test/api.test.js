@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateNiftiFile, predictSegmentation } from '../src/services/api.js';
+import { validateNiftiFile, predictSegmentation, suggestSequenceFromFilename } from '../src/services/api.js';
 
 describe('API Service: NIfTI File Validation', () => {
   test('accepts valid .nii file within 1 GiB limit', () => {
@@ -91,5 +91,21 @@ describe('API Service: Client-Side Pre-Flight Checks in predictSegmentation', ()
         message: /Duplicate file detected/
       }
     );
+  });
+});
+
+describe('API Service: Sequence Filename Suggestion', () => {
+  test('detects high-confidence modality keywords', () => {
+    assert.equal(suggestSequenceFromFilename('BraTS2021_00001_t1ce.nii.gz').slotId, 't1gd');
+    assert.equal(suggestSequenceFromFilename('patient_t1gd.nii').slotId, 't1gd');
+    assert.equal(suggestSequenceFromFilename('subject_flair.nii.gz').slotId, 'flair');
+    assert.equal(suggestSequenceFromFilename('volume_t2.nii.gz').slotId, 't2');
+    assert.equal(suggestSequenceFromFilename('volume_t1.nii.gz').slotId, 't1');
+  });
+
+  test('marks ambiguous filenames without silently forcing assignment', () => {
+    const ambiguous = suggestSequenceFromFilename('brain_scan_series_001.nii.gz');
+    assert.equal(ambiguous.slotId, null);
+    assert.equal(ambiguous.confidence, 'ambiguous');
   });
 });
