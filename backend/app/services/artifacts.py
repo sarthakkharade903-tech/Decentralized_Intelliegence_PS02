@@ -263,13 +263,25 @@ def save_prediction_artifacts(
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report_payload, f, indent=2)
 
+    # 4. Export vectorized clinical report PDF
+    pdf_filename = f"{base_stem}_report.pdf"
+    pdf_path = target_dir / pdf_filename
+    pdf_url = f"/api/v1/artifacts/{pdf_filename}"
+    try:
+        from backend.app.services.pdf_report import generate_clinical_pdf_report
+        generate_clinical_pdf_report(report_data=report_payload, output_destination=str(pdf_path))
+    except Exception as pdf_err:
+        pdf_url = ""
+
     return {
         "segmentation_mask_url": f"/api/v1/artifacts/{mask_filename}",
         "report_summary_url": f"/api/v1/artifacts/{report_filename}",
         "mesh_url": f"/api/v1/artifacts/{mesh_filename}",
+        "report_pdf_url": pdf_url,
         "segmentation_mask_path": str(mask_path),
         "report_summary_path": str(report_path),
         "mesh_path": str(mesh_path),
+        "report_pdf_path": str(pdf_path) if pdf_url else "",
     }
 
 
@@ -334,6 +346,8 @@ def get_artifact_path(
         media_type = "application/octet-stream"
     elif lower.endswith(".json"):
         media_type = "application/json"
+    elif lower.endswith(".pdf"):
+        media_type = "application/pdf"
     else:
         media_type = "application/octet-stream"
 

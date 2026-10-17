@@ -11,11 +11,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import io
+import json
 import torch
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -31,6 +33,7 @@ from backend.app.services.inference import (
     InferenceResult,
     run_segmentation_inference,
 )
+from backend.app.services.pdf_report import generate_clinical_pdf_report
 from backend.app.services.validator import validate_mpmri_sequences
 
 
@@ -209,6 +212,7 @@ async def predict_segmentation(
             "segmentation_mask_url": artifacts["segmentation_mask_url"],
             "report_summary_url": artifacts["report_summary_url"],
             "mesh_url": artifacts.get("mesh_url", ""),
+            "report_pdf_url": artifacts.get("report_pdf_url", ""),
         },
         "disclaimer": RESEARCH_DISCLAIMER,
     }
@@ -224,4 +228,51 @@ async def get_artifact(filename: str):
         path=str(file_path),
         media_type=media_type,
         filename=filename,
+    )
+
+
+# ─── Clinical PDF Report Endpoints ───────────────────────────────────────────
+
+@app.get("/api/v1/report/pdf", tags=["Reports"])
+async def download_report_pdf(case_id: Optional[str] = None):
+    """Generates and streams a vector PDF clinical diagnostic report for the specified or default case."""
+    report_data = None
+    if case_id:
+        report_json_path = DEFAULT_ARTIFACTS_DIR / f"{case_id}_report.json"
+        if report_json_path.exists():
+            try:
+                with open(report_json_path, "r", encoding="utf-8") as f:
+                    report_data = json.load(f)
+            except Exception:
+                pass
+
+    pdf_buffer = io.BytesIO()
+    await run_in_threadpool(generate_clinical_pdf_report, report_data=report_data, output_destination=pdf_buffer)
+    pdf_buffer.seek(0)
+
+    filename = f"{case_id or 'NeuroScope_Diagnostic_Report'}.pdf"
+    return Response(
+        content=pdf_buffer.getvalue(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"'
+        },
+    )
+
+
+@app.post("/api/v1/report/pdf", tags=["Reports"])
+async def generate_custom_report_pdf(payload: Dict[str, Any]):
+    """Generates and streams a vector PDF clinical diagnostic report from provided case payload."""
+    pdf_buffer = io.BytesIO()
+    await run_in_threadpool(generate_clinical_pdf_report, report_data=payload, output_destination=pdf_buffer)
+    pdf_buffer.seek(0)
+
+    case_id = payload.get("case_id") or payload.get("patient_id") or "NeuroScope_Diagnostic_Report"
+    filename = f"{case_id}.pdf"
+    return Response(
+        content=pdf_buffer.getvalue(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"'
+        },
     )

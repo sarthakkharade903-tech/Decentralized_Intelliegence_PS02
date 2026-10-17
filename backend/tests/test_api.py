@@ -289,3 +289,30 @@ def test_save_prediction_artifacts_creates_files():
             data = json.load(f)
         assert data["patient_id"] == "PATIENT_XYZ"
         assert data["volumes_ml"]["whole_tumor"] == 0.035
+
+
+def test_report_pdf_get_endpoint():
+    """Verify GET /api/v1/report/pdf streams valid PDF binary."""
+    response = client.get("/api/v1/report/pdf")
+    assert response.status_code == 200
+    assert response.headers.get("content-type") == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+
+
+def test_report_pdf_post_endpoint():
+    """Verify POST /api/v1/report/pdf returns valid PDF binary from custom case payload."""
+    payload = {
+        "patient_id": "TEST_CASE_99",
+        "volumes_ml": {
+            "whole_tumor": 110.0,
+            "tumor_core": 55.0,
+            "enhancing_tumor": 25.0,
+            "edema": 55.0,
+            "necrotic_core": 30.0,
+        },
+    }
+    response = client.post("/api/v1/report/pdf", json=payload)
+    assert response.status_code == 200
+    assert response.headers.get("content-type") == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+

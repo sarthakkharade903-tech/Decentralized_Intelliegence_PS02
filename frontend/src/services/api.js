@@ -316,3 +316,43 @@ export async function downloadArtifact(url, filename = 'segmentation_result.nii.
   document.body.removeChild(a);
   URL.revokeObjectURL(objectUrl);
 }
+
+/**
+ * Downloads the clinical diagnostic report PDF for the given patient case.
+ *
+ * @param {object} [patientCase]
+ * @param {string} [filename]
+ * @returns {Promise<void>}
+ */
+export async function downloadClinicalReportPdf(patientCase = null, filename = 'NeuroScope_Diagnostic_Report.pdf') {
+  if (patientCase?.artifacts?.report_pdf_url) {
+    return downloadArtifact(patientCase.artifacts.report_pdf_url, filename);
+  }
+
+  const targetUrl = `${API_BASE_URL}/api/v1/report/pdf`;
+  let response;
+  if (patientCase) {
+    response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patientCase),
+    });
+  } else {
+    response = await fetch(targetUrl, { method: 'GET' });
+  }
+
+  if (!response.ok) {
+    throw new Error(`Failed to generate clinical PDF report: HTTP ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(objectUrl);
+}
+
