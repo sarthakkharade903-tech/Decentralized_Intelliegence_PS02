@@ -141,11 +141,11 @@ export default function WorkstationPage({
       };
 
   // Dynamic clinical calculations derived directly from patientCase.volumes_ml
-  const wt = patientCase.volumes_ml?.whole_tumor || 0;
-  const tc = patientCase.volumes_ml?.tumor_core || 0;
-  const et = patientCase.volumes_ml?.enhancing_tumor || 0;
-  const ed = patientCase.volumes_ml?.edema !== undefined ? patientCase.volumes_ml.edema : Math.max(0, wt - tc);
-  const netc = patientCase.volumes_ml?.necrotic_core !== undefined ? patientCase.volumes_ml.necrotic_core : Math.max(0, tc - et);
+  const wt = Number(patientCase.volumes_ml?.whole_tumor) || 0;
+  const tc = Number(patientCase.volumes_ml?.tumor_core) || 0;
+  const et = Number(patientCase.volumes_ml?.enhancing_tumor) || 0;
+  const ed = patientCase.volumes_ml?.edema !== undefined ? Number(patientCase.volumes_ml.edema) : Math.max(0, wt - tc);
+  const netc = patientCase.volumes_ml?.necrotic_core !== undefined ? Number(patientCase.volumes_ml.necrotic_core) : Math.max(0, tc - et);
 
   const edPct = wt > 0 ? ((ed / wt) * 100).toFixed(1) : '0.0';
   const tcPct = wt > 0 ? ((tc / wt) * 100).toFixed(1) : '0.0';
@@ -203,16 +203,16 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
 
   // Voxel spacing and count constants for Point 6 explicit formula
   const spacing = patientCase.original_geometry?.voxel_spacing_mm || [1.0, 1.0, 1.0];
-  const sx = spacing[0] || 1.0;
-  const sy = spacing[1] || 1.0;
-  const sz = spacing[2] || 1.0;
-  const voxelUnitVol = sx * sy * sz;
+  const sx = Number(spacing[0]) || 1.0;
+  const sy = Number(spacing[1]) || 1.0;
+  const sz = Number(spacing[2]) || 1.0;
+  const voxelUnitVol = (sx * sy * sz) || 1.0;
 
-  const wtVoxels = patientCase.metrics?.voxel_counts?.wt_voxels ?? Math.round((wt * 1000) / voxelUnitVol);
-  const edVoxels = patientCase.metrics?.voxel_counts?.ed_voxels ?? Math.round((ed * 1000) / voxelUnitVol);
-  const tcVoxels = patientCase.metrics?.voxel_counts?.tc_voxels ?? Math.round((tc * 1000) / voxelUnitVol);
-  const etVoxels = patientCase.metrics?.voxel_counts?.et_voxels ?? Math.round((et * 1000) / voxelUnitVol);
-  const netcVoxels = patientCase.metrics?.voxel_counts?.netc_voxels ?? Math.round((netc * 1000) / voxelUnitVol);
+  const wtVoxels = Number(patientCase.metrics?.voxel_counts?.wt_voxels) || Math.round((wt * 1000) / voxelUnitVol);
+  const edVoxels = Number(patientCase.metrics?.voxel_counts?.ed_voxels) || Math.round((ed * 1000) / voxelUnitVol);
+  const tcVoxels = Number(patientCase.metrics?.voxel_counts?.tc_voxels) || Math.round((tc * 1000) / voxelUnitVol);
+  const etVoxels = Number(patientCase.metrics?.voxel_counts?.et_voxels) || Math.round((et * 1000) / voxelUnitVol);
+  const netcVoxels = Number(patientCase.metrics?.voxel_counts?.netc_voxels) || Math.round((netc * 1000) / voxelUnitVol);
 
   // Point 7: 10 Held-out patient cases with zero training overlap disclosure
   const heldOutValidationCases = [
@@ -365,7 +365,7 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
                 <div>
                   <span className="text-[11px] font-mono text-[#6E5D65] uppercase">Whole Tumor (WT)</span>
                   <div className="text-2xl font-bold font-mono text-[#30252A]">
-                    {patientCase.volumes_ml?.whole_tumor?.toFixed(2) || '122.41'}{' '}
+                    {Number(patientCase.volumes_ml?.whole_tumor || 122.41).toFixed(2)}{' '}
                     <span className="text-xs font-normal text-[#6D263D]">mL</span>
                   </div>
                 </div>
@@ -378,7 +378,7 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
                 <div>
                   <span className="text-[11px] font-mono text-[#0284C7] uppercase">Tumor Core (TC)</span>
                   <div className="text-2xl font-bold font-mono text-[#0369A1]">
-                    {patientCase.volumes_ml?.tumor_core?.toFixed(2) || '60.38'}{' '}
+                    {Number(patientCase.volumes_ml?.tumor_core || 60.38).toFixed(2)}{' '}
                     <span className="text-xs font-normal text-[#0284C7]">mL</span>
                   </div>
                 </div>
@@ -391,7 +391,7 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
                 <div>
                   <span className="text-[11px] font-mono text-[#E11D48] uppercase">Enhancing (ET)</span>
                   <div className="text-2xl font-bold font-mono text-[#BE123C]">
-                    {patientCase.volumes_ml?.enhancing_tumor?.toFixed(2) || '32.66'}{' '}
+                    {Number(patientCase.volumes_ml?.enhancing_tumor || 32.66).toFixed(2)}{' '}
                     <span className="text-xs font-normal text-[#E11D48]">mL</span>
                   </div>
                 </div>

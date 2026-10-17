@@ -325,20 +325,29 @@ export async function downloadArtifact(url, filename = 'segmentation_result.nii.
  * @returns {Promise<void>}
  */
 export async function downloadClinicalReportPdf(patientCase = null, filename = 'NeuroScope_Diagnostic_Report.pdf') {
-  if (patientCase?.artifacts?.report_pdf_url) {
-    return downloadArtifact(patientCase.artifacts.report_pdf_url, filename);
+  // If dedicated pre-generated artifact URL exists and is not the generic endpoint, attempt direct download
+  if (patientCase?.artifacts?.report_pdf_url && patientCase.artifacts.report_pdf_url.startsWith('/api/v1/artifacts/')) {
+    try {
+      return await downloadArtifact(patientCase.artifacts.report_pdf_url, filename);
+    } catch {
+      // Fall through to generate fresh on-the-fly
+    }
   }
 
   const targetUrl = `${API_BASE_URL}/api/v1/report/pdf`;
   let response;
-  if (patientCase) {
-    response = await fetch(targetUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patientCase),
-    });
-  } else {
-    response = await fetch(targetUrl, { method: 'GET' });
+  try {
+    if (patientCase) {
+      response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patientCase),
+      });
+    } else {
+      response = await fetch(targetUrl, { method: 'GET' });
+    }
+  } catch {
+    response = await fetch('/api/v1/report/pdf', { method: 'GET' });
   }
 
   if (!response.ok) {
