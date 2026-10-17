@@ -8,4 +8,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  resolve: {
+    dedupe: ['three'],
+  },
+  optimizeDeps: {
+    include: ['three'],
+  },
 })

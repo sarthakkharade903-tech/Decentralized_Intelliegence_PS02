@@ -162,7 +162,7 @@ export default function MriWorkspace({ workspaceRef, onInferenceSuccess }) {
 
       setAnalysisStatus('success');
       if (onInferenceSuccess) {
-        onInferenceSuccess(result);
+        onInferenceSuccess(result, files);
       }
     } catch (err) {
       if (err.name === 'AbortError') {
