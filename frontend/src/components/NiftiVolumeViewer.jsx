@@ -67,6 +67,10 @@ export default function NiftiVolumeViewer({
 
   // Viewport Configuration
   const [viewMode, setViewMode] = useState('multiplanar'); // 'multiplanar' | 'render' | 'axial' | 'coronal' | 'sagittal'
+  const viewModeRef = useRef(viewMode);
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
   const [showCrosshairs, setShowCrosshairs] = useState(true);
 
   // Volume & Window/Level Controls
@@ -82,6 +86,11 @@ export default function NiftiVolumeViewer({
   useEffect(() => {
     maskOpacityRef.current = maskOpacity;
   }, [maskOpacity]);
+
+  const initialMaskUrlRef = useRef(initialMaskUrl);
+  useEffect(() => {
+    initialMaskUrlRef.current = initialMaskUrl;
+  }, [initialMaskUrl]);
 
   const lastLoadedMaskRef = useRef(null);
   const lastLoadedBaseRef = useRef(null);
@@ -198,7 +207,8 @@ export default function NiftiVolumeViewer({
       }
 
       // Draw initial scene
-      nv.setSliceType(viewMode === 'render' ? nv.sliceTypeRender : nv.sliceTypeMultiplanar);
+      const currentMode = viewModeRef.current;
+      nv.setSliceType(currentMode === 'render' ? nv.sliceTypeRender : nv.sliceTypeMultiplanar);
       nv.drawScene();
 
       const elapsed = Math.round(performance.now() - startTime);
@@ -226,6 +236,15 @@ export default function NiftiVolumeViewer({
         };
         setMetadata(meta);
         if (onMetadataExtracted) onMetadataExtracted(meta);
+
+        // If an initial mask is queued, overlay it immediately now that base volume is in Layer 0
+        if (initialMaskUrlRef.current) {
+          lastLoadedMaskRef.current = initialMaskUrlRef.current;
+          lastLoadedBaseRef.current = meta.filename;
+          setTimeout(() => {
+            loadSegmentationMask(initialMaskUrlRef.current, 'predicted_mask.nii.gz');
+          }, 50);
+        }
       }
     } catch (err) {
       console.error('Failed to load base MRI:', err);
@@ -233,7 +252,7 @@ export default function NiftiVolumeViewer({
     } finally {
       setIsLoading(false);
     }
-  }, [viewMode, onMetadataExtracted]);
+  }, [onMetadataExtracted]);
 
   // --------------------------------------------------------------------------
   // 3. Load & Overlay Real Segmentation Mask (Layer 1)
@@ -241,7 +260,12 @@ export default function NiftiVolumeViewer({
   const loadSegmentationMask = useCallback(async (source, maskName = 'tumor_segmentation.nii.gz') => {
     const nv = nvRef.current;
     if (!nv || !nv.volumes || nv.volumes.length === 0) {
-      setError('Please load an anatomical MRI scan before overlaying a segmentation mask.');
+      // If base volume is still loading, wait 150ms and retry
+      setTimeout(() => {
+        if (nvRef.current?.volumes?.length > 0) {
+          loadSegmentationMask(source, maskName);
+        }
+      }, 150);
       return;
     }
 

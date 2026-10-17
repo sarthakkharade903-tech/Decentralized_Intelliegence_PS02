@@ -4,6 +4,7 @@ import Hero from './components/Hero';
 import MriWorkspace from './components/MriWorkspace';
 import WorkstationPage from './components/WorkstationPage';
 import UploadModal from './components/UploadModal';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState('landing'); // 'landing' | 'workstation'
@@ -83,12 +84,14 @@ export default function App() {
         </>
       ) : (
         <main className="flex-1 flex flex-col">
-          <WorkstationPage
-            onBackToHome={() => setCurrentPage('landing')}
-            onOpenUpload={() => setIsUploadOpen(true)}
-            predictionData={predictionData}
-            uploadedFiles={uploadedFiles}
-          />
+          <ErrorBoundary onBackToHome={() => setCurrentPage('landing')}>
+            <WorkstationPage
+              onBackToHome={() => setCurrentPage('landing')}
+              onOpenUpload={() => setIsUploadOpen(true)}
+              predictionData={predictionData}
+              uploadedFiles={uploadedFiles}
+            />
+          </ErrorBoundary>
         </main>
       )}
 

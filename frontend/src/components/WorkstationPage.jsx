@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import NiftiVolumeViewer from './NiftiVolumeViewer';
+import RealTumor3DViewer from './RealTumor3DViewer';
 import {
   predictSegmentation,
   validateNiftiFile,
@@ -790,6 +791,7 @@ DISCLAIMER: Research and educational prototype. Not for clinical diagnosis.`;
                 <div className="flex items-center gap-1 p-1 rounded-full bg-[#EAE0D9] border border-[#DDD0C8]">
                   {[
                     { id: 'mri', label: 'MRI Viewer', icon: Layers },
+                    { id: 'real3d', label: 'Patient 3D Mesh', icon: Activity },
                     { id: 'atlas', label: 'Anatomy Atlas', icon: Box },
                     { id: 'report', label: 'Report', icon: FileText },
                   ].map(({ id, label, icon: Icon }) => (
@@ -814,6 +816,11 @@ DISCLAIMER: Research and educational prototype. Not for clinical diagnosis.`;
                     Loaded · {viewerMetadata.dimensions?.join('×')}
                   </span>
                 )}
+                {activeTab === 'real3d' && (
+                  <span className="text-[10px] font-mono text-teal-800 px-2.5 py-0.5 rounded-full border border-teal-300 bg-teal-50 font-bold">
+                    PATIENT 3D ISOSURFACE (MARCHING CUBES)
+                  </span>
+                )}
                 {activeTab === 'atlas' && (
                   <span className="text-[10px] font-mono text-amber-800 px-2.5 py-0.5 rounded-full border border-amber-300 bg-amber-50 font-bold">
                     ILLUSTRATIVE ANATOMY — NOT PATIENT DATA
@@ -830,6 +837,15 @@ DISCLAIMER: Research and educational prototype. Not for clinical diagnosis.`;
                     initialMaskUrl={maskUrl}
                     onMetadataExtracted={setViewerMetadata}
                     className="h-full w-full"
+                  />
+                </div>
+              )}
+
+              {/* ── PATIENT 3D MESH TAB ────────────────────────────────────── */}
+              {activeTab === 'real3d' && (
+                <div className="rounded-2xl overflow-hidden border border-[#DDD0C8] bg-[#070509] shadow-md" style={{ height: 540 }}>
+                  <RealTumor3DViewer
+                    meshUrl={predictionResult?.artifacts?.mesh_url}
                   />
                 </div>
               )}

@@ -32,7 +32,8 @@ from backend.app.services.inference import (
     get_model_readiness,
     run_segmentation_inference,
 )
-from backend.app.services.validator import validate_mpmri_sequences
+from backend.app.services.validator import load_nifti_image, validate_mpmri_sequences
+from backend.app.services.volumetrics import compute_dice_scores
 
 
 @asynccontextmanager
@@ -211,9 +212,8 @@ async def predict_segmentation(
     """
     raw_uploads = {"t1": t1, "t1gd": t1gd, "t2": t2, "flair": flair}
 
-    # 1. Ingestion and Clinical Invariant Validation
-    # UploadFiles are read synchronously within validate_mpmri_sequences
-    validation_result = validate_mpmri_sequences(raw_uploads)
+    # 1. Ingestion and Clinical Invariant Validation (Offloaded to worker thread)
+    validation_result = await run_in_threadpool(validate_mpmri_sequences, raw_uploads)
 
     # 2. Strict Model Readiness Check (Fail-Closed)
     readiness = get_model_readiness()
@@ -237,15 +237,33 @@ async def predict_segmentation(
         allow_untrained=False,
     )
 
-    # 4. Generate and Export Artifacts (.nii.gz mask + .json report)
+    # 4. Optional Expert Ground-Truth Evaluation (Dice Similarity Coefficients)
+    dice_metrics = None
+    if expert_seg is not None and getattr(expert_seg, "filename", None):
+        try:
+            gt_img = await run_in_threadpool(load_nifti_image, expert_seg, "expert_seg")
+            gt_data = gt_img.get_fdata().astype(int)
+            pred_data = inference_result.discrete_mask
+            if gt_data.shape == pred_data.shape:
+                dice_metrics = compute_dice_scores(pred_data, gt_data)
+        except Exception as e:
+            # Non-blocking evaluation: if ground truth cannot be parsed, log and proceed
+            pass
+
+    # 5. Generate and Export Artifacts (.nii.gz mask + .json report + .json 3D mesh)
+    ref_scan = validation_result.sequences.get("t1gd") or validation_result.sequences.get("flair")
     artifacts = await run_in_threadpool(
         save_prediction_artifacts,
         result=inference_result,
         patient_id=patient_id,
+        reference_scan=ref_scan,
     )
 
-    # 5. Build Final Response matching frontend/src/services/api.js contract
+    # 6. Build Final Response matching frontend contract
     vol_dict = inference_result.volumetrics.to_dict()
+    metrics = vol_dict["metrics"]
+    if dice_metrics is not None:
+        metrics["dice"] = dice_metrics
 
     return {
         "status": "success",
@@ -254,10 +272,11 @@ async def predict_segmentation(
         "hardware_device": inference_result.hardware_device,
         "original_geometry": inference_result.original_geometry.to_dict(),
         "volumes_ml": vol_dict["volumes_ml"],
-        "metrics": vol_dict["metrics"],
+        "metrics": metrics,
         "artifacts": {
             "segmentation_mask_url": artifacts["segmentation_mask_url"],
             "report_summary_url": artifacts["report_summary_url"],
+            "mesh_url": artifacts.get("mesh_url", ""),
         },
         "disclaimer": RESEARCH_DISCLAIMER,
     }
