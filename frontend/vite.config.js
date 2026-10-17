@@ -14,4 +14,12 @@ export default defineConfig({
   optimizeDeps: {
     include: ['three'],
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 })
