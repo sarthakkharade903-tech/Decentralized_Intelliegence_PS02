@@ -155,7 +155,13 @@ def load_nifti_image(
 
             fh = nib.FileHolder(fileobj=stream)
             file_map = {"image": fh, "header": fh}
-            return nib.Nifti1Image.from_file_map(file_map)
+            try:
+                return nib.Nifti1Image.from_file_map(file_map)
+            except Exception:
+                stream.seek(0)
+                fh2 = nib.FileHolder(fileobj=stream)
+                file_map2 = {"image": fh2, "header": fh2}
+                return nib.Nifti2Image.from_file_map(file_map2)
 
         raise ValueError(f"Unsupported file input type: {type(file_or_path)}")
     except Exception as e:

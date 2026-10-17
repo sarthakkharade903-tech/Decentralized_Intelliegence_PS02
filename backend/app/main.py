@@ -175,8 +175,8 @@ async def predict_segmentation(
     raw_uploads = {"t1": t1, "t1gd": t1gd, "t2": t2, "flair": flair}
 
     # 1. Ingestion and Clinical Invariant Validation
-    # UploadFiles are read synchronously within validate_mpmri_sequences
-    validation_result = validate_mpmri_sequences(raw_uploads)
+    # Offload synchronous disk I/O and NIfTI decompression to threadpool
+    validation_result = await run_in_threadpool(validate_mpmri_sequences, raw_uploads)
 
     # 2. Model Weights Resolution
     configured_weights = os.getenv("NEUROSCOPE_WEIGHTS_PATH")
