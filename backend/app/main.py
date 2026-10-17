@@ -237,11 +237,13 @@ async def predict_segmentation(
         allow_untrained=False,
     )
 
-    # 4. Generate and Export Artifacts (.nii.gz mask + .json report)
+    # 4. Generate and Export Artifacts (.nii.gz mask + .json report + .json 3D mesh)
+    ref_scan = validation_result.sequences.get("t1gd") or validation_result.sequences.get("flair")
     artifacts = await run_in_threadpool(
         save_prediction_artifacts,
         result=inference_result,
         patient_id=patient_id,
+        reference_scan=ref_scan,
     )
 
     # 5. Build Final Response matching frontend/src/services/api.js contract
@@ -258,6 +260,7 @@ async def predict_segmentation(
         "artifacts": {
             "segmentation_mask_url": artifacts["segmentation_mask_url"],
             "report_summary_url": artifacts["report_summary_url"],
+            "mesh_url": artifacts.get("mesh_url", ""),
         },
         "disclaimer": RESEARCH_DISCLAIMER,
     }

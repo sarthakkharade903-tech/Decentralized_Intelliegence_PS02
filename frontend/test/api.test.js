@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateNiftiFile, predictSegmentation, suggestSequenceFromFilename } from '../src/services/api.js';
+import { validateNiftiFile, predictSegmentation, suggestSequenceFromFilename, validatePredictionResponse } from '../src/services/api.js';
 
 describe('API Service: NIfTI File Validation', () => {
   test('accepts valid .nii file within 1 GiB limit', () => {
@@ -107,5 +107,61 @@ describe('API Service: Sequence Filename Suggestion', () => {
     const ambiguous = suggestSequenceFromFilename('brain_scan_series_001.nii.gz');
     assert.equal(ambiguous.slotId, null);
     assert.equal(ambiguous.confidence, 'ambiguous');
+  });
+});
+
+describe('API Service: Response Validation (Prevent Malformed Outputs Mistaken for Success)', () => {
+  test('accepts valid, complete segmentation response payload', () => {
+    const validPayload = {
+      status: 'success',
+      patient_id: 'BraTS2021_00001',
+      volumes_ml: {
+        whole_tumor: 42.15,
+        tumor_core: 18.30,
+        enhancing_tumor: 9.45
+      }
+    };
+    const check = validatePredictionResponse(validPayload);
+    assert.equal(check.valid, true);
+  });
+
+  test('rejects empty or null response payloads', () => {
+    assert.equal(validatePredictionResponse(null).valid, false);
+    assert.equal(validatePredictionResponse(undefined).valid, false);
+    assert.match(validatePredictionResponse(null).error, /empty or non-JSON/);
+  });
+
+  test('rejects response payload declaring error despite HTTP 200', () => {
+    const errorPayload = {
+      status: 'error',
+      message: 'Inference OOM on GPU'
+    };
+    const check = validatePredictionResponse(errorPayload);
+    assert.equal(check.valid, false);
+    assert.match(check.error, /Inference OOM on GPU/);
+  });
+
+  test('rejects response payload missing volumes_ml quantification', () => {
+    const missingVolumes = {
+      status: 'success',
+      patient_id: 'BraTS2021_00001'
+      // missing volumes_ml
+    };
+    const check = validatePredictionResponse(missingVolumes);
+    assert.equal(check.valid, false);
+    assert.match(check.error, /missing required "volumes_ml"/);
+  });
+
+  test('rejects incomplete volumes_ml (missing WT, TC, or ET)', () => {
+    const incompleteVolumes = {
+      status: 'success',
+      volumes_ml: {
+        whole_tumor: 42.15
+        // missing tumor_core and enhancing_tumor
+      }
+    };
+    const check = validatePredictionResponse(incompleteVolumes);
+    assert.equal(check.valid, false);
+    assert.match(check.error, /incomplete volume metrics/);
   });
 });

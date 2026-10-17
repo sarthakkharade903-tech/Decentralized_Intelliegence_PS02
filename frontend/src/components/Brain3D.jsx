@@ -280,7 +280,6 @@ export default function Brain3D() {
     try {
       dracoLoader = new DRACOLoader();
       dracoLoader.setDecoderPath('/draco/gltf/');
-      dracoLoader.setDecoderConfig({ type: 'js' });
 
       const loader = new GLTFLoader();
       loader.setDRACOLoader(dracoLoader);
