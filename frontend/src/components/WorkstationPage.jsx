@@ -188,6 +188,17 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
     setTimeout(() => setCopiedReport(false), 2500);
   };
 
+  // Download Clinical JSON Findings
+  const handleDownloadJSON = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(patientCase, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `${patientCase.patient_id}_findings.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
   // Download Official Publication-Grade PDF Report
   const handleDownloadPdf = async () => {
     setIsDownloadingPdf(true);
