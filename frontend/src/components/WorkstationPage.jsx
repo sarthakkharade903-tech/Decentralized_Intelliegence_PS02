@@ -660,6 +660,10 @@ CLINICAL INDICES:
                 overlayOpacity={overlayOpacity}
                 onChangeOpacity={setOverlayOpacity}
                 onOpenUpload={onOpenUpload}
+                patientCase={patientCase}
+                computedVolumes={computedVolumes}
+                geometryData={geometryData}
+                coordsData={coordsData}
               />
             </div>
           </div>

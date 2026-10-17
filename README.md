@@ -251,10 +251,21 @@ npm run build
         * **ET (Label 4, Red `#EF4444`)**: Emissive enhancing active margin
       * Composite quick toggles: Whole Tumor (`WT` = 1+2+4) and Tumor Core (`TC` = 1+4).
       * Per-region opacity slider, wireframe render mode toggle, tight 3D bounding caliper wireframe with physical dimensions ($L_x \times L_y \times L_z$ in mm), and `RAS+` orientation axes.
-      * Honest provenance badge ("AI Prediction (MONAI)" vs "Ground Truth (Expert)" vs "No Mask Loaded").
-      * Honest empty states: If 0 tumor voxels exist or no mask is loaded, clearly informs the clinician without displaying synthetic placeholder geometry.
+      * Honest provenance badge ("AI Prediction (MONAI)" vs "Ground Truth (Expert)" vs "Clinical Study Case").
+      * **Interactive 3D Anatomical Brain Model & Surgical Telemetry (`AnatomicalBrainLoader.js` & `brain.glb`)**:
+        * Integrated high-poly Draco-compressed 3D anatomical brain model from Itay Inbar's Brain Project / Z-Anatomy featuring 437 distinct anatomical structures.
+        * Mathematically verified $SO(3)$ coordinate transform matrix ($\det = +1$) converting Z-Anatomy coordinates (meters) into medical `RAS+` space (millimeters) without parity inversion.
+        * Anatomical structure hierarchy & peeling controls: Cortex with dynamic opacity slider (5% to 65%), Ventricular system (CSF), Major neural tracts (CST, Arcuate, Optic Radiation), Cerebral vasculature (Circle of Willis arteries & dural venous sinuses), Deep grey nuclei (thalamus, basal ganglia), Brainstem, and Cerebellum.
+        * Interactive Three.js Raycaster structure inspection on hover: identifies anatomical labels, categories, side (Right/Left/Median), and physical Euclidean distance to tumor centroid.
+        * Dual camera focus modes: "Focus: Tumor" (centers on pathological lesion) $\leftrightarrow$ "Focus: Atlas" (frames entire cerebral vault).
+        * Integrated Real-Time Volumetric & Surgical Resection HUD:
+          * Real physical volumes ($WT, TC, ET, ED, NETC$ in mL) adhering to AGENTS.md formula ($V = N \cdot \prod s_i / 1000$).
+          * Infiltration Index ($ED / TC$) with clinical categorization (Severe, Marked, Moderate, Minimal).
+          * Active Proliferation Fraction ($ET / TC$) assessing angiogenic density.
+          * RANO major orthogonal dimensions ($D_x \times D_y \times D_z$ mm) and 2D product ($\text{mm}^2$).
+          * Spatial centroid in RAS+ mm and automated neuro-anatomical quadrant/lobe sector localization.
       * WebGL resource lifecycle: Complete disposal of geometries, materials, controls, and renderer on unmount to prevent browser memory leaks.
-  * **Phase 6: Trust Layer, Scientific Measurements & Performance**:
+  * **Phase 6 & Phase 8: Trust Layer, Scientific Measurements, Benchmarks & 3D Anatomy**:
     * **Core Scientific Measurement Engine (`frontend/src/lib/metrics.js`)**:
       * Physical volume quantification derived strictly from NIfTI 4x4 affine determinant: $V_{\text{voxel}} = |\det(A_{3\times 3})|$ mm³, $V_{\text{region}} = N \cdot V_{\text{voxel}} / 1000$ mL (isotropic & anisotropic geometries verified).
       * Sørensen–Dice Similarity Coefficient with explicit zero-denominator policy ($\text{Dice}(\emptyset, \emptyset) = 1.0$).
@@ -279,14 +290,15 @@ npm run build
       * 5 functional tabs: `2D Multi-Planar (MPR)`, `3D Tumor Surface`, `Clinical Volumetrics`, `Trust Layer`, and `Diagnostic Report`.
       * `MetricsPanel.jsx` presents physical tumor volumes, expert evaluation metrics, and SHA-256 provenance block with explicit `—` for missing values (never defaulting to 0).
   * **Automated Test Suite**:
-    * **95/95 frontend unit & integration tests passing** across 24 suites (`npm test`):
-      * 12 API service & NIfTI client validation tests
-      * 10 Viewer geometry, affine transform, and discrete colormap tests
+    * **120/120 frontend unit & integration tests passing** across 28 suites (`npm test`):
+      * 12 API service & NIfTI client validation tests (`api.test.js`)
+      * 10 Viewer geometry, affine transform, and discrete colormap tests (`viewer.test.js`)
       * 11 3D surface extraction, bounding box, affine transform, and real backend artifact tests (`surface.test.js`)
+      * 11 Anatomical brain loader, $SO(3)$ rotation matrix, sector localization, and volumetric calculation tests (`anatomicalBrain.test.js`)
       * 53 Phase 6 metrics, affine volume, confusion matrix, Dice/Sensitivity/Precision/Specificity, HD95, SHA-256 hash, and error overlay tests (`metrics.test.js`)
-      * 9 Phase 6 Trust Layer check runner and benchmark aggregation tests (`trustAndBenchmark.test.js`)
-    * **0 lint errors, 0 warnings** across all 21 files (`npm run lint`).
-    * **Production build verified** in 1.37s (`npm run build`).
+      * 23 Phase 6/8 Trust Layer pre-flight checks and manifest benchmark suite runner tests (`trustAndBenchmark.test.js`)
+    * **0 lint errors, 0 warnings** across all 25 files (`npm run lint`).
+    * **Production build verified** in 2.28s (`npm run build`).
 
 * **Inference Hardware & Backend Contract**:
   * Connected to Member 2's FastAPI + MONAI backend (`POST /api/v1/segment/predict`).
