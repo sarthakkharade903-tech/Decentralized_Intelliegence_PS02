@@ -53,18 +53,13 @@ app = FastAPI(
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:5174",
-    "http://localhost:5175",
-    "http://localhost:3000",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
-    "http://127.0.0.1:5175",
-    "http://127.0.0.1:3000",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -175,8 +170,8 @@ async def predict_segmentation(
     raw_uploads = {"t1": t1, "t1gd": t1gd, "t2": t2, "flair": flair}
 
     # 1. Ingestion and Clinical Invariant Validation
-    # Offload synchronous disk I/O and NIfTI decompression to threadpool
-    validation_result = await run_in_threadpool(validate_mpmri_sequences, raw_uploads)
+    # UploadFiles are read synchronously within validate_mpmri_sequences
+    validation_result = validate_mpmri_sequences(raw_uploads)
 
     # 2. Model Weights Resolution
     configured_weights = os.getenv("NEUROSCOPE_WEIGHTS_PATH")
