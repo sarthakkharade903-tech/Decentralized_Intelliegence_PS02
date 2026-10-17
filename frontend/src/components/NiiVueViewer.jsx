@@ -87,19 +87,23 @@ export default function NiiVueViewer({
       isBlob = true;
       scanName = uploadedFiles[activeModality].name;
     } else {
-      scanUrl = `${backendBase}/api/v1/artifacts/sample_${activeModality}.nii.gz`;
+      // Direct CDN delivery from Vercel public directory for instant zero-latency loading
+      scanUrl = `/data/sample_${activeModality}.nii.gz`;
       scanName = `sample_${activeModality}.nii.gz`;
     }
 
     // Resolve Mask URL & Name
     let targetMaskUrl = null;
     let maskName = 'segmentation.nii.gz';
-    if (maskUrl) {
-      targetMaskUrl = maskUrl.startsWith('http') ? maskUrl : `${backendBase}${maskUrl}`;
+    if (maskUrl && !maskUrl.includes('sample_seg.nii.gz')) {
+      targetMaskUrl = maskUrl.startsWith('http')
+        ? maskUrl
+        : (maskUrl.startsWith('/data/') ? maskUrl : `${backendBase}${maskUrl}`);
       const urlParts = maskUrl.split('/');
       maskName = urlParts[urlParts.length - 1] || 'segmentation.nii.gz';
     } else {
-      targetMaskUrl = `${backendBase}/api/v1/artifacts/sample_seg.nii.gz`;
+      // Direct CDN delivery from Vercel public directory
+      targetMaskUrl = '/data/sample_seg.nii.gz';
       maskName = 'sample_seg.nii.gz';
     }
 
@@ -135,14 +139,25 @@ export default function NiiVueViewer({
 
         if (!isCancelled) setLoading(false);
       } catch (err) {
-        console.warn('Primary volume load warning, trying background scan only:', err);
+        console.warn('Primary volume load warning, trying local fallback:', err);
         try {
-          await nv.loadVolumes([{ url: scanUrl, name: scanName, colormap: brainColormap || 'gray' }]);
+          const bratsCmap = buildBratsColormap(showNETC, showED, showET, overlayOpacity);
+          const fallbackScan = `/data/sample_${activeModality}.nii.gz`;
+          const fallbackMask = '/data/sample_seg.nii.gz';
+          await nv.loadVolumes([
+            { url: fallbackScan, name: `sample_${activeModality}.nii.gz`, colormap: brainColormap || 'gray' },
+            { url: fallbackMask, name: 'sample_seg.nii.gz', colormapLabel: bratsCmap, opacity: overlayOpacity },
+          ]);
           if (!isCancelled) setLoading(false);
         } catch (innerErr) {
-          if (!isCancelled) {
-            setError(innerErr.message || 'Failed to load WebGL MRI volumes.');
-            setLoading(false);
+          try {
+            await nv.loadVolumes([{ url: `/data/sample_${activeModality}.nii.gz`, name: `sample_${activeModality}.nii.gz`, colormap: brainColormap || 'gray' }]);
+            if (!isCancelled) setLoading(false);
+          } catch (lastErr) {
+            if (!isCancelled) {
+              setError(lastErr.message || 'Failed to load WebGL MRI volumes.');
+              setLoading(false);
+            }
           }
         }
       }
@@ -219,10 +234,24 @@ export default function NiiVueViewer({
 
       {/* Error Overlay */}
       {error && (
-        <div className="absolute inset-0 z-20 bg-[#0c0309]/95 flex flex-col items-center justify-center space-y-2 p-6 text-center">
-          <AlertCircle className="w-7 h-7 text-rose-400" />
+        <div className="absolute inset-0 z-20 bg-[#0c0309]/95 flex flex-col items-center justify-center space-y-3 p-6 text-center">
+          <AlertCircle className="w-8 h-8 text-rose-400" />
           <p className="text-xs font-mono text-rose-300 font-semibold">WebGL Medical Viewer Error</p>
-          <p className="text-[11px] font-mono text-slate-400 max-w-sm">{error}</p>
+          <p className="text-[11px] font-mono text-slate-300 max-w-md leading-relaxed">
+            {error === 'Failed to fetch'
+              ? `Unable to connect to AI backend at "${backendBase}". Ensure your Cloudflare tunnel is running and VITE_API_BASE_URL is added to Vercel.`
+              : error}
+          </p>
+          <button
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              loadVolumeData();
+            }}
+            className="px-4 py-1.5 rounded-lg text-xs font-mono bg-rose-900/60 text-rose-200 border border-rose-700/50 hover:bg-rose-800 transition-colors cursor-pointer"
+          >
+            Retry Connection
+          </button>
         </div>
       )}
 

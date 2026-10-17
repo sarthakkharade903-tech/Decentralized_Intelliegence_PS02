@@ -1,0 +1,76 @@
+{
+  "status": "success",
+  "patient_id": "BraTS2021_PATIENT_CASE",
+  "timestamp_utc": "2026-10-17T06:35:13.546842+00:00",
+  "execution_time_seconds": 6.0,
+  "hardware_device": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+  "original_geometry": {
+    "dimensions": [
+      240,
+      240,
+      155
+    ],
+    "voxel_spacing_mm": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "orientation": "RAS"
+  },
+  "volumes_ml": {
+    "whole_tumor": 116.51,
+    "tumor_core": 60.24,
+    "enhancing_tumor": 32.54,
+    "edema": 56.28,
+    "necrotic_core": 27.7
+  },
+  "metrics": {
+    "voxel_counts": {
+      "wt_voxels": 116512,
+      "tc_voxels": 60236,
+      "et_voxels": 32535,
+      "ed_voxels": 56276,
+      "netc_voxels": 27701
+    },
+    "voxel_volume_mm3": 1.0
+  },
+  "mesh_metadata": {
+    "dimensions": [
+      240,
+      240,
+      155
+    ],
+    "voxel_spacing_mm": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "tumor_center_voxel": [
+      158.1,
+      116.4,
+      66.8
+    ],
+    "tumor_dimensions_mm": {
+      "axial_x": 52.0,
+      "coronal_y": 87.0,
+      "sagittal_z": 70.0,
+      "max_diameter": 87.0
+    }
+  },
+  "model_provenance": {
+    "model_architecture": "MONAI SegResNet (BraTS 2021)",
+    "input_modalities_order": [
+      "t1gd",
+      "t1",
+      "t2",
+      "flair"
+    ],
+    "labels": {
+      "0": "Background",
+      "1": "Necrotic and Non-Enhancing Tumor Core (NETC)",
+      "2": "Peritumoral Edema (ED)",
+      "4": "Enhancing Tumor (ET)"
+    }
+  },
+  "disclaimer": "AI-predicted candidate tumor regions for research and educational purposes only. Not a clinical diagnostic device. Not for treatment planning without board-certified radiologist review."
+}

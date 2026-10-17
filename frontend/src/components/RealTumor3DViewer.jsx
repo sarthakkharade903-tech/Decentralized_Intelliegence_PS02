@@ -43,8 +43,8 @@ export default function RealTumor3DViewer({
 
     const backendBase = API_BASE_URL || 'http://localhost:8000';
     const targetUrl = meshUrl
-      ? (meshUrl.startsWith('http') ? meshUrl : `${backendBase}${meshUrl}`)
-      : `${backendBase}/api/v1/artifacts/sample_mesh.json`;
+      ? (meshUrl.startsWith('http') ? meshUrl : (meshUrl.startsWith('/data/') ? meshUrl : `${backendBase}${meshUrl}`))
+      : '/data/sample_mesh.json';
 
     const tryFetchLocalFallback = () => {
       fetch('/data/sample_mesh.json')

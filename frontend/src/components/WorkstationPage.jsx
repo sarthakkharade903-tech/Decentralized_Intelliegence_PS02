@@ -99,9 +99,9 @@ export default function WorkstationPage({
           },
         },
         artifacts: predictionData.artifacts || {
-          segmentation_mask_url: '/api/v1/artifacts/sample_seg.nii.gz',
-          report_summary_url: '/api/v1/artifacts/sample_report.json',
-          mesh_url: '/api/v1/artifacts/sample_mesh.json',
+          segmentation_mask_url: '/data/sample_seg.nii.gz',
+          report_summary_url: '/data/sample_report.json',
+          mesh_url: '/data/sample_mesh.json',
           report_pdf_url: '/api/v1/report/pdf',
         },
       }
@@ -133,9 +133,9 @@ export default function WorkstationPage({
           },
         },
         artifacts: {
-          segmentation_mask_url: '/api/v1/artifacts/sample_seg.nii.gz',
-          report_summary_url: '/api/v1/artifacts/sample_report.json',
-          mesh_url: '/api/v1/artifacts/sample_mesh.json',
+          segmentation_mask_url: '/data/sample_seg.nii.gz',
+          report_summary_url: '/data/sample_report.json',
+          mesh_url: '/data/sample_mesh.json',
           report_pdf_url: '/api/v1/report/pdf',
         },
       };
@@ -557,7 +557,7 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
                 <NiiVueViewer
                   uploadedFiles={uploadedFiles}
                   activeModality={activeModality}
-                  maskUrl={patientCase.artifacts?.segmentation_mask_url || '/api/v1/artifacts/sample_seg.nii.gz'}
+                  maskUrl={patientCase.artifacts?.segmentation_mask_url || '/data/sample_seg.nii.gz'}
                   showNETC={showNETC}
                   showED={showED}
                   showET={showET}
@@ -656,7 +656,7 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
               {/* Real 3D Marching Cubes WebGL Canvas with Pink Brain & Centering */}
               <div className="w-full h-[560px] rounded-2xl overflow-hidden bg-[#0e030a] border border-[#FCE7F3] shadow-md">
                 <RealTumor3DViewer
-                  meshUrl={patientCase.artifacts?.mesh_url || '/api/v1/artifacts/sample_mesh.json'}
+                  meshUrl={patientCase.artifacts?.mesh_url || '/data/sample_mesh.json'}
                   showNETC={showNETC}
                   showED={showED}
                   showET={showET}
@@ -752,7 +752,7 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
 
               {/* 188-Region Detailed Anatomical Neuro-Parts WebGL Viewer */}
               <DetailedParts3DViewer
-                meshUrl={patientCase.artifacts?.mesh_url || '/api/v1/artifacts/sample_mesh.json'}
+                meshUrl={patientCase.artifacts?.mesh_url || '/data/sample_mesh.json'}
                 showNETC={showNETC}
                 showED={showED}
                 showET={showET}
