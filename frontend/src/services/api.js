@@ -340,19 +340,20 @@ export async function downloadArtifact(url, filename = 'segmentation_result.nii.
  * @returns {Promise<void>}
  */
 export async function downloadClinicalReportPdf(patientCase = null, filename = 'NeuroScope_Diagnostic_Report.pdf') {
-  // If dedicated pre-generated artifact URL exists and is not the generic endpoint, attempt direct download
-  if (patientCase?.artifacts?.report_pdf_url && patientCase.artifacts.report_pdf_url.startsWith('/api/v1/artifacts/')) {
+  // If dedicated pre-generated artifact URL exists (e.g. static CDN or API artifact), attempt direct download
+  const pdfUrl = patientCase?.artifacts?.report_pdf_url;
+  if (pdfUrl && (pdfUrl.startsWith('/api/v1/artifacts/') || pdfUrl.startsWith('/data/'))) {
     try {
-      return await downloadArtifact(patientCase.artifacts.report_pdf_url, filename);
+      return await downloadArtifact(pdfUrl, filename);
     } catch {
       // Fall through to generate fresh on-the-fly
     }
   }
 
-  const targetUrl = `${API_BASE_URL}/api/v1/report/pdf`;
+  const targetUrl = API_BASE_URL ? `${API_BASE_URL}/api/v1/report/pdf` : '/api/v1/report/pdf';
   let response;
   try {
-    if (patientCase) {
+    if (patientCase && API_BASE_URL) {
       response = await fetch(targetUrl, {
         method: 'POST',
         headers: {
@@ -361,21 +362,27 @@ export async function downloadClinicalReportPdf(patientCase = null, filename = '
         },
         body: JSON.stringify(patientCase),
       });
-    } else {
+    } else if (API_BASE_URL) {
       response = await fetch(targetUrl, {
         method: 'GET',
         headers: { 'ngrok-skip-browser-warning': 'true' },
       });
     }
   } catch {
-    response = await fetch('/api/v1/report/pdf', {
-      method: 'GET',
-      headers: { 'ngrok-skip-browser-warning': 'true' },
-    });
+    response = null;
   }
 
-  if (!response.ok) {
-    throw new Error(`Failed to generate clinical PDF report: HTTP ${response.status}`);
+  // If backend is offline or returned an error, gracefully fall back to bundled static sample report PDF
+  if (!response || !response.ok) {
+    try {
+      response = await fetch('/data/sample_report.pdf');
+    } catch {
+      // Final guard
+    }
+  }
+
+  if (!response || !response.ok) {
+    throw new Error(`Failed to retrieve clinical PDF report: HTTP ${response?.status || 'Offline'}`);
   }
 
   const blob = await response.blob();

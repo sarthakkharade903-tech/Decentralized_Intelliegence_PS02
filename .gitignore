@@ -94,6 +94,7 @@ runs/
 predictions/
 reports/generated/
 *.pdf
+!frontend/public/data/sample_report.pdf
 logs/
 *.log
 

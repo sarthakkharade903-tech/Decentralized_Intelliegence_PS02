@@ -368,7 +368,19 @@ export default function MriWorkspace({ workspaceRef, onInferenceSuccess }) {
           </div>
 
           {/* Analysis Action Button */}
-          <div className="lg:col-span-4 flex justify-end">
+          <div className="lg:col-span-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (onInferenceSuccess) onInferenceSuccess(null);
+              }}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-medium text-xs sm:text-sm bg-transparent border border-[#F8F5F0]/40 text-[#F8F5F0] hover:bg-[#F8F5F0]/10 transition-all cursor-pointer"
+              title="Explore full 3D interactive workstation with precomputed BraTS 2021 patient case"
+            >
+              <span>Explore Demo Case</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#F8F5F0]/20 font-bold">3D</span>
+            </button>
+
             <button
               onClick={handleContinueAnalysis}
               disabled={!allUploaded || isProcessing}
@@ -436,18 +448,26 @@ export default function MriWorkspace({ workspaceRef, onInferenceSuccess }) {
               <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold text-rose-100">
-                  Backend Connection Notice
+                  Backend Server Offline (Laptop Compute Preserved)
                 </p>
                 <p className="text-[11px] text-rose-200/90 mt-1 leading-relaxed max-w-xl">
                   {analysisError}
                 </p>
                 <p className="text-[10px] text-rose-300/70 mt-1 font-mono">
-                  Target: POST {API_BASE_URL || 'http://localhost:8000'}/api/v1/segment/predict
+                  You can explore the full precomputed BraTS 2021 case with 3D mesh reconstruction, RANO metrics, and diagnostic report without a live backend:
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
+              <button
+                onClick={() => {
+                  if (onInferenceSuccess) onInferenceSuccess(null);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F8F5F0] text-[#6D263D] hover:bg-white transition-colors cursor-pointer"
+              >
+                <span>View Precomputed Demo</span>
+              </button>
               <button
                 onClick={handleContinueAnalysis}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-900 text-rose-100 hover:bg-rose-800 border border-rose-700 transition-colors cursor-pointer"

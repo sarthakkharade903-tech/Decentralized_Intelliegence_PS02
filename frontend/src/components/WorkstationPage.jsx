@@ -102,7 +102,7 @@ export default function WorkstationPage({
           segmentation_mask_url: '/data/sample_seg.nii.gz',
           report_summary_url: '/data/sample_report.json',
           mesh_url: '/data/sample_mesh.json',
-          report_pdf_url: '/api/v1/report/pdf',
+          report_pdf_url: '/data/sample_report.pdf',
         },
       }
     : {
@@ -136,7 +136,7 @@ export default function WorkstationPage({
           segmentation_mask_url: '/data/sample_seg.nii.gz',
           report_summary_url: '/data/sample_report.json',
           mesh_url: '/data/sample_mesh.json',
-          report_pdf_url: '/api/v1/report/pdf',
+          report_pdf_url: '/data/sample_report.pdf',
         },
       };
 
@@ -205,8 +205,17 @@ SURGICAL & CLINICAL INDICES (RANO CRITERIA):
     try {
       await downloadClinicalReportPdf(patientCase, `${patientCase.patient_id}_Diagnostic_Report.pdf`);
     } catch (err) {
-      console.error('Failed to download PDF report:', err);
-      window.open(`/api/v1/report/pdf?case_id=${encodeURIComponent(patientCase.patient_id)}`, '_blank');
+      console.warn('Direct PDF download failed, falling back to static asset / browser print:', err);
+      try {
+        const a = document.createElement('a');
+        a.href = '/data/sample_report.pdf';
+        a.download = `${patientCase.patient_id}_Diagnostic_Report.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch {
+        window.print();
+      }
     } finally {
       setIsDownloadingPdf(false);
     }

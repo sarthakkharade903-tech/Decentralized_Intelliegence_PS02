@@ -362,13 +362,25 @@ export default function UploadModal({ isOpen, onClose, onInferenceSuccess, onSeg
                   <span>Validation & Processing Notice</span>
                 </div>
                 {status === 'error' && (
-                  <button
-                    onClick={handleSubmit}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-900/60 hover:bg-rose-800/80 border border-rose-700/80 text-rose-100 font-mono text-[11px] transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Retry Inference</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (onInferenceSuccess) onInferenceSuccess(null);
+                        else if (onSegmentationComplete) onSegmentationComplete(null);
+                        onClose();
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-700/80 text-cyan-200 font-mono text-[11px] transition-colors cursor-pointer"
+                    >
+                      <span>Explore Demo Case</span>
+                    </button>
+                    <button
+                      onClick={handleSubmit}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-900/60 hover:bg-rose-800/80 border border-rose-700/80 text-rose-100 font-mono text-[11px] transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Retry</span>
+                    </button>
+                  </div>
                 )}
               </div>
               <p className="pl-6 text-[11px] leading-relaxed">{errorMessage}</p>
@@ -648,7 +660,20 @@ export default function UploadModal({ isOpen, onClose, onInferenceSuccess, onSeg
             <span>Endpoint: <code className="text-slate-300">POST /api/v1/segment/predict</code></span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (onInferenceSuccess) onInferenceSuccess(null);
+                else if (onSegmentationComplete) onSegmentationComplete(null);
+                onClose();
+              }}
+              className="px-3 py-1.5 rounded-lg text-xs font-mono text-cyan-300 bg-cyan-950/50 border border-cyan-800/80 hover:bg-cyan-900/60 transition-colors cursor-pointer"
+              title="Explore complete precomputed patient case without requiring a live backend"
+            >
+              <span>Explore Demo Case</span>
+            </button>
+
             {requiredCount > 0 && status !== 'uploading' && status !== 'inferring' && status !== 'validating' && (
               <button
                 onClick={handleClearAll}
